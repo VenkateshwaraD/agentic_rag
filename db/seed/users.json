@@ -1,0 +1,62 @@
+[
+  {
+    "user_id": "u_agent1",
+    "api_key": "dev-key-1",
+    "role": "agent",
+    "client_ids": [
+      "acme",
+      "bluepeak",
+      "crestline",
+      "deltaworks"
+    ]
+  },
+  {
+    "user_id": "u_agent2",
+    "api_key": "dev-key-1",
+    "role": "agent",
+    "client_ids": [
+      "everfield",
+      "foxglove",
+      "grainmark",
+      "harborline"
+    ]
+  },
+  {
+    "user_id": "u_senior",
+    "api_key": "dev-key-2",
+    "role": "senior_agent",
+    "client_ids": [
+      "acme",
+      "bluepeak",
+      "crestline",
+      "deltaworks",
+      "everfield",
+      "foxglove",
+      "grainmark",
+      "harborline",
+      "ironvale",
+      "junipersky",
+      "kestrelbay",
+      "latticepoint"
+    ]
+  },
+  {
+    "user_id": "u_admin",
+    "api_key": "dev-key-2",
+    "role": "admin",
+    "client_ids": [
+      "acme",
+      "bluepeak",
+      "crestline",
+      "deltaworks",
+      "everfield",
+      "foxglove",
+      "grainmark",
+      "harborline",
+      "ironvale",
+      "junipersky",
+      "kestrelbay",
+      "latticepoint"
+    ]
+  }
+]
