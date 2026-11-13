@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Env & secrets
+.env
+*.pem
+*.key
+
+# Data / runtime artifacts
+.chroma/
+eval/reports/
+!eval/reports/.gitkeep
+data/real/
+!data/real/.gitkeep
+.cache/
+model_cache/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

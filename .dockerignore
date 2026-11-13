@@ -1,0 +1,10 @@
+.git
+.venv
+venv
+__pycache__
+*.pyc
+.env
+eval/reports
+.chroma
+.cache
+tests
