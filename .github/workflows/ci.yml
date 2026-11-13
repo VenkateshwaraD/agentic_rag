@@ -1,0 +1,83 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # OIDC → AWS role
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: "" # e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install -e ".[dev]"
+      - run: ruff check src eval
+      - run: ruff format --check src eval
+      - run: pytest tests/unit -q
+
+  build:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+      - name: Build & push backend
+        run: |
+          docker build -f deploy/docker/backend.Dockerfile \
+            -t ${{ steps.ecr.outputs.registry }}/agentic-rag-backend:${{ github.sha }} \
+            -t ${{ steps.ecr.outputs.registry }}/agentic-rag-backend:staging .
+          docker push --all-tags ${{ steps.ecr.outputs.registry }}/agentic-rag-backend
+      - name: Build & push frontend
+        run: |
+          docker build -f deploy/docker/frontend.Dockerfile \
+            -t ${{ steps.ecr.outputs.registry }}/agentic-rag-frontend:${{ github.sha }} \
+            -t ${{ steps.ecr.outputs.registry }}/agentic-rag-frontend:staging .
+          docker push --all-tags ${{ steps.ecr.outputs.registry }}/agentic-rag-frontend
+
+  deploy-staging:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - run: aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER }}
+      - run: |
+          cd deploy/k8s/overlays/staging
+          kustomize edit set image \
+            ECR_REGISTRY/agentic-rag-backend=${{ steps.ecr.outputs.registry }}/agentic-rag-backend:${{ github.sha }} \
+            ECR_REGISTRY/agentic-rag-frontend=${{ steps.ecr.outputs.registry }}/agentic-rag-frontend:${{ github.sha }} || true
+          kubectl apply -k .
+
+  deploy-prod:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - run: aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER }}
+      - run: kubectl apply -k deploy/k8s/overlays/prod

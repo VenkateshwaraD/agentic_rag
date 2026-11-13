@@ -1,0 +1,79 @@
+# Optional Langfuse stack for local tracing: docker compose -f docker-compose.yml
+# -f docker-compose.observability.yml up -d
+services:
+  langfuse-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: langfuse
+      POSTGRES_DB: langfuse
+    volumes: [langfuse_pg:/var/lib/postgresql/data]
+
+  langfuse-clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    environment:
+      CLICKHOUSE_DB: langfuse
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+    volumes: [langfuse_ch:/var/lib/clickhouse]
+
+  langfuse-redis:
+    image: redis:7-alpine
+
+  langfuse-minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9091"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: miniosecret
+    volumes: [langfuse_minio:/data]
+
+  langfuse-web:
+    image: langfuse/langfuse:3
+    ports: ["3000:3000"]
+    environment:
+      DATABASE_URL: postgresql://langfuse:langfuse@langfuse-db:5432/langfuse
+      CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+      REDIS_CONNECTION_STRING: redis://langfuse-redis:6379
+      S3_ENDPOINT: langfuse-minio
+      S3_BUCKET_NAME: langfuse
+      S3_ACCESS_KEY_ID: minio
+      S3_SECRET_ACCESS_KEY: miniosecret
+      S3_FORCE_PATH_STYLE: "true"
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: devsecret
+      SALT: devsalt
+      LANGFUSE_INIT_ORG_ID: dev
+      LANGFUSE_INIT_PROJECT_ID: copilot
+      LANGFUSE_INIT_PROJECT_NAME: copilot
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: lf_pk_dev
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: lf_sk_dev
+      LANGFUSE_INIT_USER_EMAIL: dev@local
+      LANGFUSE_INIT_USER_PASSWORD: devpassword
+      LANGFUSE_INIT_USER_NAME: dev
+    depends_on: [langfuse-db, langfuse-clickhouse, langfuse-redis, langfuse-minio]
+
+  langfuse-worker:
+    image: langfuse/langfuse-worker:3
+    environment:
+      DATABASE_URL: postgresql://langfuse:langfuse@langfuse-db:5432/langfuse
+      CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+      REDIS_CONNECTION_STRING: redis://langfuse-redis:6379
+      S3_ENDPOINT: langfuse-minio
+      S3_BUCKET_NAME: langfuse
+      S3_ACCESS_KEY_ID: minio
+      S3_SECRET_ACCESS_KEY: miniosecret
+      S3_FORCE_PATH_STYLE: "true"
+      SALT: devsalt
+    depends_on: [langfuse-web]
+
+volumes:
+  langfuse_pg:
+  langfuse_ch:
+  langfuse_minio:

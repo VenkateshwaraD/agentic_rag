@@ -1,0 +1,63 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: rag
+      POSTGRES_PASSWORD: rag
+      POSTGRES_DB: postgres
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/seed:/seed:ro
+      - ./db/seed/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rag"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  opensearch:
+    image: opensearchproject/opensearch:2.17.1
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+      bootstrap.memory_lock: "true"
+    ulimits:
+      memlock: {soft: -1, hard: -1}
+    ports: ["9200:9200"]
+    volumes:
+      - osdata:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  backend:
+    build:
+      context: .
+      dockerfile: deploy/docker/backend.Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://rag:rag@postgres:5432/ragdb
+      OPS_DATABASE_URL: postgresql://rag_readonly:readonly@postgres:5432/opsdb
+      OPS_ADMIN_DATABASE_URL: postgresql://rag:rag@postgres:5432/opsdb
+      OPENSEARCH_URL: http://opensearch:9200
+    ports: ["8000:8000"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      opensearch: {condition: service_healthy}
+
+  streamlit:
+    build:
+      context: .
+      dockerfile: deploy/docker/frontend.Dockerfile
+    environment:
+      API_URL: http://backend:8000
+    ports: ["8501:8501"]
+    depends_on: [backend]
+
+volumes:
+  pgdata:
+  osdata:

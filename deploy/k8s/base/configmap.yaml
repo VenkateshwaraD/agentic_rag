@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: copilot-config
+  namespace: agentic-rag
+data:
+  ANTHROPIC_MODEL: "claude-sonnet-4-20250514"
+  EMBEDDING_PROVIDER: "bedrock"
+  BEDROCK_EMBED_MODEL: "amazon.titan-embed-text-v2:0"
+  AWS_REGION: "us-east-1"
+  OPENSEARCH_URL: "http://opensearch:9200"
+  LANGFUSE_HOST: "http://langfuse-web:3000"
+  API_URL: "http://backend:8000"

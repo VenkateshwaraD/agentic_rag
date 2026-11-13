@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: agentic-rag
+resources:
+  - ../../base
+images:
+  - name: ECR_REGISTRY/agentic-rag-backend
+    newTag: prod
+  - name: ECR_REGISTRY/agentic-rag-frontend
+    newTag: prod
+patches:
+  # Prod datastores are managed services (RDS + Amazon OpenSearch Service)
+  # — endpoints injected via this ConfigMap patch, no in-cluster StatefulSets.
+  - target: {kind: ConfigMap, name: copilot-config}
+    patch: |-
+      - op: replace
+        path: /data/OPENSEARCH_URL
+        value: "https://vpc-agentic-rag.REGION.es.amazonaws.com"

@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: agentic-rag
+resources:
+  - ../../base
+  - datastores.yaml
+configMapGenerator:
+  - name: db-seed
+    files:
+      - init.sh=../../../db/seed/init.sh
+      - init_ops.sql=../../../db/seed/init_ops.sql
+      - readonly_role.sql=../../../db/seed/readonly_role.sql
+images:
+  - name: ECR_REGISTRY/agentic-rag-backend
+    newTag: staging
+  - name: ECR_REGISTRY/agentic-rag-frontend
+    newTag: staging

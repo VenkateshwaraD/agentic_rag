@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: agentic-rag
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: backend}
+  template:
+    metadata:
+      labels: {app: backend}
+    spec:
+      serviceAccountName: copilot-backend
+      containers:
+        - name: backend
+          image: ECR_REGISTRY/agentic-rag-backend:IMAGE_TAG
+          envFrom:
+            - configMapRef: {name: copilot-config}
+            - secretRef: {name: copilot-secrets}
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet: {path: /ready, port: 8000}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health, port: 8000}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests: {cpu: "500m", memory: "1.5Gi"}
+            limits: {cpu: "2", memory: "3Gi"}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: agentic-rag
+spec:
+  selector: {app: backend}
+  ports:
+    - port: 8000
+      targetPort: 8000
