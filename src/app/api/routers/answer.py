@@ -34,12 +34,26 @@ def _run_answer(
     forwards the optional per-request timeout as a budget override.
     """
     request_id = getattr(request.state, "request_id", uuid.uuid4().hex[:16])
+    claimed = False
     if idempotency_key:
-        cached = idempotency.lookup(
+        status, cached = idempotency.claim(
             principal.user_id, idempotency_key, body.question, body.client_id
         )
-        if cached is not None:
+        if status == "replay" and cached is not None:
             return {**cached, "idempotent_replay": True}
+        if status == "conflict":
+            from app.core.errors import IdempotencyConflictError
+
+            raise IdempotencyConflictError(
+                "Idempotency-Key was already used with a different request body"
+            )
+        if status == "in_flight":
+            from app.core.errors import IdempotencyConflictError
+
+            raise IdempotencyConflictError(
+                "a request with this Idempotency-Key is still in flight — retry shortly"
+            )
+        claimed = status == "claimed"
     result = answer(
         question=body.question,
         principal=principal,
@@ -47,8 +61,8 @@ def _run_answer(
         max_elapsed_ms=timeout_ms,
         client_id=body.client_id,
     )
-    if idempotency_key:
-        idempotency.store(principal.user_id, idempotency_key, body.question, body.client_id, result)
+    if claimed and idempotency_key:
+        idempotency.complete(principal.user_id, idempotency_key, result)
     return result
 
 
