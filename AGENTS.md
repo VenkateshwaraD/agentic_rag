@@ -22,7 +22,7 @@ read-only, entitlement-scoped store interfaces. API is versioned at
 `/api/v1` with correlation ids, error envelopes, idempotency, SSE
 streaming, and an async human-review queue.
 
-- Source: `src/app` | Eval: `eval/` | Tests: `tests/` | Deploy: `deploy/`
+- Source: `src/app` | Eval: `eval/` | Tests: `tests/` | Deploy: `deploy/` | Docs: `docs/`
 - Entry points: `copilot` CLI (`app.cli:app`), FastAPI (`app.main:app`),
   Streamlit UI (`src/ui/app.py`)
 
