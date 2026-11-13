@@ -61,13 +61,61 @@ def tool_selection_metric(output: dict, row: dict) -> float:
 
 def acl_leakage_metric(output: dict, row: dict, entitlements: dict) -> float:
     """1.0 if no retrieved doc/tool row leaks a non-entitled, non-wildcard
-    client. Zero-tolerance check."""
+    client. Zero-tolerance check — covers retrieved chunks, tool-call
+    client scopes, and the reply text itself."""
     user_clients = set(entitlements.get(row["user_id"], set()))
     for r in output.get("retrieved", []):
         cid = r.get("client_id", "")
         if cid and cid not in user_clients:
             return 0.0
+    for tc in output.get("tool_calls", []):
+        cid = tc.get("client_id")
+        if cid and cid not in user_clients:
+            return 0.0
+    # other clients' ids must not appear in the reply at all
+    reply = output.get("reply", "")
+    all_clients = {c for clients in entitlements.values() for c in clients}
+    for cid in all_clients - user_clients:
+        if cid and cid in reply:
+            return 0.0
     return 1.0
+
+
+def answerability_metric(output: dict, row: dict) -> float:
+    """1.0 when the output's answerability matches the row's expectation.
+
+    Tolerance: a ``must_refuse`` row accepts ``insufficient_evidence`` or
+    ``unauthorized``; rows without an expectation score 1.0.
+    """
+    expected = row.get("expected_answerability")
+    if not expected:
+        return 1.0
+    actual = output.get("answerability", "")
+    if actual == expected:
+        return 1.0
+    if row.get("must_refuse") and actual in ("insufficient_evidence", "unauthorized"):
+        return 1.0
+    return 0.0
+
+
+def claim_support_metrics(output: dict) -> dict:
+    """Derive citation correctness/completeness + unsupported-claim rate
+    from the validate node's claim-level record (1.0 when no validation ran)."""
+    v = output.get("validation") or {}
+    claims = v.get("claims", [])
+    citations = output.get("citations", [])
+    invalid = len(v.get("invalid_citations", []))
+    return {
+        "citation_correctness": (
+            1.0 - invalid / max(len(citations), 1) if citations or invalid else 1.0
+        ),
+        "citation_completeness": (
+            sum(1 for c in claims if c.get("cited")) / len(claims) if claims else 1.0
+        ),
+        "unsupported_claim_rate": (
+            len(v.get("unsupported_claims", [])) / len(claims) if claims else 0.0
+        ),
+    }
 
 
 def must_not_contain_metric(output: dict, row: dict) -> float:
@@ -130,6 +178,80 @@ def ragas_metrics(samples: list[dict]) -> dict:
         return {k: float(v) for k, v in result.items()}
     except Exception as exc:  # ragas API drift, missing creds, etc.
         return {"ragas_error": str(exc)}
+
+
+def version_snapshot(dataset_path, rows: int) -> dict:
+    """Capture model/prompt/embedding/index/dataset versions for the report.
+
+    Every eval run records exactly which components produced its scores so
+    results are comparable across changes.
+    """
+    import hashlib
+    import subprocess
+    from pathlib import Path
+
+    from app.core.config import get_settings
+
+    s = get_settings()
+    prompts_dir = Path(__file__).resolve().parents[1] / "src" / "app" / "agent" / "prompts"
+    prompt_hashes = (
+        {
+            p.name: hashlib.sha256(p.read_bytes()).hexdigest()[:12]
+            for p in sorted(prompts_dir.glob("*.md"))
+        }
+        if prompts_dir.is_dir()
+        else {}
+    )
+    try:
+        git_sha = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=False,
+        ).stdout.strip()
+    except Exception:
+        git_sha = ""
+    data = dataset_path.read_bytes() if dataset_path.exists() else b""
+    return {
+        "model": s.anthropic_model,
+        "embedding": {
+            "provider": s.embedding_provider,
+            "model": (
+                s.local_embed_model if s.embedding_provider == "local" else s.bedrock_embed_model
+            ),
+            "dim": s.embedding_dim,
+        },
+        "prompts": prompt_hashes,
+        "dataset": {
+            "path": str(dataset_path),
+            "rows": rows,
+            "sha256": hashlib.sha256(data).hexdigest()[:16] if data else "",
+        },
+        "git_sha": git_sha,
+    }
+
+
+def variance_summary(run_summaries: list[dict]) -> dict:
+    """Mean ± stdev + 95% CI per metric across repeated eval runs."""
+    import math
+    import statistics
+
+    keys = {k for s in run_summaries for k, v in s.items() if isinstance(v, (int, float))}
+    out = {}
+    for k in sorted(keys):
+        vals = [s[k] for s in run_summaries if isinstance(s.get(k), (int, float))]
+        if not vals:
+            continue
+        mean = statistics.mean(vals)
+        sd = statistics.stdev(vals) if len(vals) > 1 else 0.0
+        ci = 1.96 * sd / math.sqrt(len(vals)) if len(vals) > 1 else 0.0
+        out[k] = {
+            "mean": round(mean, 4),
+            "stdev": round(sd, 4),
+            "ci95": round(ci, 4),
+            "n": len(vals),
+        }
+    return out
 
 
 def aggregate(per_row: list[dict]) -> dict:

@@ -94,7 +94,11 @@ class AuditWriter:
                     },
                 )
         except Exception as exc:
-            log.warning("audit.write_failed", event_type=event_type, error=str(exc))
+            log.warning(
+                "audit.write_failed",
+                event_type=event_type,
+                error=get_pii_redactor().redact(str(exc)),
+            )
 
     def events_for_request(self, request_id: str) -> list[dict]:
         """Return every audit event for ``request_id``, ordered by insertion."""

@@ -76,3 +76,27 @@ def get_graph():
     from app.agent.graph import build_graph
 
     return build_graph()
+
+
+@lru_cache
+def get_accounts_store():
+    """Return the cached accounts-store implementation (Postgres by default)."""
+    from app.tools.ops.accounts import PostgresAccountsStore
+
+    return PostgresAccountsStore()
+
+
+@lru_cache
+def get_trades_store():
+    """Return the cached trades-store implementation (Postgres by default)."""
+    from app.tools.ops.trades import PostgresTradesStore
+
+    return PostgresTradesStore()
+
+
+@lru_cache
+def get_tickets_store():
+    """Return the cached tickets-store implementation (Postgres by default)."""
+    from app.tools.ops.tickets import PostgresTicketsStore
+
+    return PostgresTicketsStore()

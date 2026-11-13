@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: agentic-rag
 resources:
   - ../../base
+  - externalsecret.yaml
 images:
   - name: ECR_REGISTRY/agentic-rag-backend
     newTag: prod

@@ -31,6 +31,20 @@ def audit(state, event_type: str, payload: dict, latency_ms: float = 0.0) -> Non
     )
 
 
+def add_error(state, message: str) -> list[str]:
+    """Return ``state['errors']`` with a PII-sanitized ``message`` appended.
+
+    Errors are surfaced in API diagnostics, so they must never carry raw
+    exception payloads containing user or client data — the redactor is
+    applied defensively even though exception strings *should* be safe.
+    """
+    from app.core.dependencies import get_pii_redactor
+
+    errors = list(state.get("errors", []))
+    errors.append(get_pii_redactor().redact(str(message))[:300])
+    return errors
+
+
 class Timer:
     """Context manager that measures elapsed wall-clock time in ``self.ms``."""
 

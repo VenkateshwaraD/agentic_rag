@@ -6,37 +6,92 @@ on:
   pull_request:
   workflow_dispatch:
 
+# one deployment pipeline per ref at a time; newer pushes supersede
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   id-token: write   # OIDC → AWS role
   contents: read
 
 env:
   AWS_REGION: us-east-1
-  ECR_REGISTRY: "" # e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@0b93645e9ea731b6f4e9e4cf0d65b4c9e3a6a30e # v5.3.0
         with: {python-version: "3.12"}
       - run: pip install -e ".[dev]"
-      - run: ruff check src eval
-      - run: ruff format --check src eval
+      - run: ruff check src eval tests
+      - run: ruff format --check src eval tests
+      - run: mypy src
       - run: pytest tests/unit -q
 
-  build:
+  integration-test:
     needs: test
-    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: rag
+          POSTGRES_PASSWORD: rag
+          POSTGRES_DB: ragdb
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U rag" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@0b93645e9ea731b6f4e9e4cf0d65b4c9e3a6a30e # v5.3.0
+        with: {python-version: "3.12"}
+      - run: pip install -e ".[dev]"
+      # integration tests self-skip on missing deps (OpenSearch/LLM); the
+      # SQL read-only permission checks run against the service container
+      - run: pytest tests/integration -q
+        env:
+          DATABASE_URL: postgresql://rag:rag@localhost:5432/ragdb
+          OPS_DATABASE_URL: postgresql://rag:rag@localhost:5432/opsdb
+      # small PR eval suite — deterministic rows only, zero-tolerance ACL gate
+      - run: python eval/runner.py --suite pr --fail-on-leak
+        env:
+          DATABASE_URL: postgresql://rag:rag@localhost:5432/ragdb
+
+  security-scan:
+    needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@0b93645e9ea731b6f4e9e4cf0d65b4c9e3a6a30e # v5.3.0
+        with: {python-version: "3.12"}
+      - run: pip install -e ".[dev]" pip-audit
+      # dependency vulnerability scan — fails on known CVEs in the env
+      - run: pip-audit --skip-editable
+      # filesystem/container config scan (Dockerfiles, k8s manifests, secrets)
+      - uses: aquasecurity/trivy-action@18f2510c396ecf7d1c71a6d4c66ffccdc2d0d8a4 # 0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+
+  build:
+    needs: [test, security-scan]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      registry: ${{ steps.ecr.outputs.registry }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-      - uses: aws-actions/amazon-ecr-login@v2
+      - uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dcbbbc00c4dfba6b5a861 # v2.0.1
         id: ecr
       - name: Build & push backend
         run: |
@@ -50,34 +105,69 @@ jobs:
             -t ${{ steps.ecr.outputs.registry }}/agentic-rag-frontend:${{ github.sha }} \
             -t ${{ steps.ecr.outputs.registry }}/agentic-rag-frontend:staging .
           docker push --all-tags ${{ steps.ecr.outputs.registry }}/agentic-rag-frontend
+      # image vulnerability scan — blocks deploy on CRITICAL/HIGH findings
+      - uses: aquasecurity/trivy-action@18f2510c396ecf7d1c71a6d4c66ffccdc2d0d8a4 # 0.28.0
+        with:
+          image-ref: ${{ steps.ecr.outputs.registry }}/agentic-rag-backend:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+      - uses: aquasecurity/trivy-action@18f2510c396ecf7d1c71a6d4c66ffccdc2d0d8a4 # 0.28.0
+        with:
+          image-ref: ${{ steps.ecr.outputs.registry }}/agentic-rag-frontend:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
 
   deploy-staging:
     needs: build
     runs-on: ubuntu-latest
     environment: staging
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
       - run: aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER }}
+      # failed image update must stop the deploy — no || true
       - run: |
           cd deploy/k8s/overlays/staging
           kustomize edit set image \
-            ECR_REGISTRY/agentic-rag-backend=${{ steps.ecr.outputs.registry }}/agentic-rag-backend:${{ github.sha }} \
-            ECR_REGISTRY/agentic-rag-frontend=${{ steps.ecr.outputs.registry }}/agentic-rag-frontend:${{ github.sha }} || true
+            ECR_REGISTRY/agentic-rag-backend=${{ needs.build.outputs.registry }}/agentic-rag-backend:${{ github.sha }} \
+            ECR_REGISTRY/agentic-rag-frontend=${{ needs.build.outputs.registry }}/agentic-rag-frontend:${{ github.sha }}
           kubectl apply -k .
+          kubectl rollout status deployment/backend -n agentic-rag --timeout=180s
+          kubectl rollout status deployment/streamlit -n agentic-rag --timeout=120s
+      - name: Post-deploy smoke tests
+        run: deploy/scripts/smoke.sh staging
 
   deploy-prod:
+    needs: build
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: production
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
       - run: aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER }}
-      - run: kubectl apply -k deploy/k8s/overlays/prod
+      # prod pins the exact built SHA — never a floating tag
+      - run: |
+          cd deploy/k8s/overlays/prod
+          kustomize edit set image \
+            ECR_REGISTRY/agentic-rag-backend=${{ needs.build.outputs.registry }}/agentic-rag-backend:${{ github.sha }} \
+            ECR_REGISTRY/agentic-rag-frontend=${{ needs.build.outputs.registry }}/agentic-rag-frontend:${{ github.sha }}
+          kubectl apply -k .
+          kubectl rollout status deployment/backend -n agentic-rag --timeout=300s
+          kubectl rollout status deployment/streamlit -n agentic-rag --timeout=180s
+      - name: Post-deploy health verification
+        run: deploy/scripts/smoke.sh prod

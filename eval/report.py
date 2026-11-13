@@ -25,6 +25,23 @@ def write_report(result: dict) -> Path:
 
     lines = [f"# Eval report — {ts}", ""]
     lines.append(f"Questions: {result.get('n_questions')}")
+    lines.append(f"Runs: {result.get('runs', 1)}")
+    lines.append(f"ACL leaks (zero tolerance): {result.get('acl_leaks', 0)}")
+    vs = result.get("version_snapshot") or {}
+    if vs:
+        lines.append("\n## Version snapshot\n")
+        emb = vs.get("embedding", {})
+        lines.append(f"- model: {vs.get('model')}")
+        lines.append(
+            f"- embedding: {emb.get('provider')}/{emb.get('model')} (dim {emb.get('dim')})"
+        )
+        lines.append(
+            f"- dataset: {vs.get('dataset', {}).get('path')} "
+            f"({vs.get('dataset', {}).get('rows')} rows, sha {vs.get('dataset', {}).get('sha256')})"
+        )
+        lines.append(f"- git: {vs.get('git_sha')}")
+        for name, h in (vs.get("prompts") or {}).items():
+            lines.append(f"- prompt {name}: {h}")
     lines.append("\n## Summary\n")
     lines.append("| metric | value |")
     lines.append("|---|---|")
@@ -37,6 +54,13 @@ def write_report(result: dict) -> Path:
     for cat, stats in result.get("by_category", {}).items():
         vals = " | ".join(str(stats.get(k, "")) for k in result.get("summary", {}))
         lines.append(f"| {cat} | {stats.get('n')} | {vals} |")
+    variance = result.get("variance")
+    if variance:
+        lines.append("\n## Variance across runs\n")
+        lines.append("| metric | mean | stdev | 95% CI | n |")
+        lines.append("|---|---|---|---|---|")
+        for k, v in variance.items():
+            lines.append(f"| {k} | {v['mean']} | {v['stdev']} | ±{v['ci95']} | {v['n']} |")
     lines.append("\n## Failures\n")
     for f in result.get("failures", [])[:25]:
         lines.append(f"- **{f['id']}** ({f['category']}): {f['question']}")

@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: agentic-rag
 resources:
   - ../../base
+  - ../../base/secret.yaml # dev placeholder — prod uses ExternalSecret
   - datastores.yaml
 configMapGenerator:
   - name: db-seed

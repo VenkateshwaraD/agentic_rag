@@ -19,4 +19,5 @@ def get_llm():
         api_key=s.anthropic_api_key or None,
         max_tokens=1024,
         temperature=0,
+        timeout=float(s.llm_timeout_s),
     )

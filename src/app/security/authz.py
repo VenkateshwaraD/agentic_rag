@@ -15,6 +15,18 @@ from typing import Any
 from app.security.authn import Principal
 
 
+def is_wildcard_entitlement(entitlements: dict) -> bool:
+    """Canonical wildcard check shared by every store and the oracle.
+
+    A document is wildcard-visible when ``entitlements['clients']`` is the
+    scalar ``"*"`` *or* a list containing ``"*"`` — both the pg ``?`` text
+    operator and the OpenSearch ``entitlement_wildcard`` field are derived
+    from this one rule so the stores can never drift apart.
+    """
+    clients = entitlements.get("clients")
+    return clients == "*" or (isinstance(clients, list) and "*" in clients)
+
+
 @dataclass(frozen=True)
 class ACLFilter:
     """A principal's entitlements rendered into per-store filter clauses.
@@ -71,11 +83,14 @@ class ACLFilter:
         }
 
     def allows(self, entitlements: dict, client_id: str) -> bool:
-        """In-memory check used by tests and ops-tool result validation."""
+        """In-memory check used by tests and ops-tool result validation.
+
+        This is the oracle for the pgvector/OpenSearch parity tests — it
+        must encode exactly the same rule both stores render.
+        """
         if self.role not in entitlements.get("roles", []):
             return False
-        clients = entitlements.get("clients", [])
-        return clients == "*" or client_id in self.client_ids
+        return is_wildcard_entitlement(entitlements) or client_id in self.client_ids
 
 
 def acl_for(principal: Principal) -> ACLFilter:

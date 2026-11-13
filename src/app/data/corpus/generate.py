@@ -73,13 +73,19 @@ INJECTION_STRINGS = [
 
 
 def _agreement_md(
-    rng: random.Random, client_id: str, name: str, tier: str, ver: int
+    rng: random.Random,
+    client_id: str,
+    name: str,
+    tier: str,
+    ver: int,
+    expiry: str = "",
 ) -> tuple[str, dict]:
     """Render one client's services-agreement markdown plus its facts record.
 
     Randomizes fee schedule, statement frequency, owning team, and effective
     date from the seeded RNG; returns the markdown body and the structured
-    ``facts`` dict used later as eval ground truth.
+    ``facts`` dict used later as eval ground truth. ``expiry`` marks the
+    document expired (freshness-filter eval coverage).
     """
     wire_fee = round(rng.uniform(12, 35), 2)
     ach_fee = round(rng.uniform(0.10, 0.75), 2)
@@ -89,10 +95,11 @@ def _agreement_md(
     owner = rng.choice(TEAMS)[0]
     eff = f"202{rng.randint(2, 4)}-{rng.randint(1, 12):02d}-01"
     doc_id = f"AGR-{CLIENTS.index(next(c for c in CLIENTS if c[0] == client_id)) + 1:03d}"
+    expiry_meta = f" | expiry_date: {expiry}" if expiry else ""
 
     body = f"""# Client Services Agreement — {name}
 
-<!-- doc_id: {doc_id} | client_id: {client_id} | version: {ver}.0 | effective_date: {eff} -->
+<!-- doc_id: {doc_id} | client_id: {client_id} | version: {ver}.0 | effective_date: {eff} | doc_type: agreement{expiry_meta} -->
 
 ## §1 Parties and Scope
 This Client Services Agreement ("Agreement") is entered into between Example Bank N.A.
@@ -129,6 +136,7 @@ Service-related inquiries are handled by the {owner} team per §1.
         "client_id": client_id,
         "version": f"{ver}.0",
         "effective_date": eff,
+        "expiry_date": expiry,
         "wire_fee": wire_fee,
         "ach_fee": ach_fee,
         "monthly_fee": monthly_fee,
@@ -155,7 +163,7 @@ def _sla_md(rng: random.Random, n: int, scope: str) -> tuple[str, dict]:
     doc_id = f"SLA-{n:03d}"
     body = f"""# Service Level Agreement — {scope}
 
-<!-- doc_id: {doc_id} | scope: {scope.lower().replace(" ", "_")} -->
+<!-- doc_id: {doc_id} | scope: {scope.lower().replace(" ", "_")} | doc_type: sla -->
 
 ## §1 Processing Cutoffs
 Transactions received before the cutoff are processed same business day; items
@@ -198,7 +206,7 @@ def _service_teams_md() -> str:
     rows = "\n".join(f"| {t} | {cov} | {region} | {email} |" for t, cov, region, email in TEAMS)
     return f"""# Client Service Team Directory
 
-<!-- doc_id: SVC-001 -->
+<!-- doc_id: SVC-001 | doc_type: ops -->
 
 ## §1 Team Directory
 | Team | Coverage hours | Region | Contact |
@@ -209,6 +217,34 @@ def _service_teams_md() -> str:
 Each client is assigned a service team owner recorded in their Client Services
 Agreement (§1). Severity-1 incidents may be raised directly with the Escalations Desk
 regardless of assignment.
+"""
+
+
+def _faq_md() -> str:
+    """Render the bank-wide client-service FAQ document (doc_type=faq).
+
+    Written as ``### Q:`` sections so the FAQ splitter can pair each
+    question with its answer as a single retrievable chunk.
+    """
+    return """# Client Service FAQ
+
+<!-- doc_id: FAQ-001 | doc_type: faq -->
+
+### Q: How do I report a failed wire transfer?
+A: Open a ticket with the Payments Operations team referencing the TRD id.
+SEV-1 wire failures may also be raised directly with the Escalations Desk.
+
+### Q: Where can I find my fee schedule?
+A: Fees are listed in §2 of your Client Services Agreement. Contact your
+assigned service team for fee questions or disputes.
+
+### Q: When are account statements produced?
+A: Statement frequency is set in your agreement (§3) — daily, weekly, or
+monthly. Electronic statements are provided at no charge.
+
+### Q: How do I escalate an unresolved incident?
+A: Unresolved SEV-1 incidents escalate to the Escalations Desk after the
+first response window; SEV-2/3 go through your assigned service team.
 """
 
 
@@ -231,9 +267,11 @@ def generate() -> dict:
 
     facts: dict = {"clients": [], "agreements": [], "slas": [], "service_teams": [], "tickets": []}
 
-    for cid, name, region, tier in CLIENTS:
+    for i, (cid, name, region, tier) in enumerate(CLIENTS):
         facts["clients"].append({"client_id": cid, "name": name, "region": region, "tier": tier})
-        body, ag = _agreement_md(rng, cid, name, tier, ver=rng.choice([1, 2]))
+        # every 4th agreement is expired — freshness/expiry eval coverage
+        expiry = "2024-06-01" if i % 4 == 0 else ""
+        body, ag = _agreement_md(rng, cid, name, tier, ver=rng.choice([1, 2]), expiry=expiry)
         (syn / "agreements" / f"{ag['doc_id']}_{cid}.md").write_text(body)
         facts["agreements"].append(ag)
 
@@ -259,6 +297,7 @@ def generate() -> dict:
         facts["slas"].append(sl)
 
     (syn / "service_teams" / "SVC-001_directory.md").write_text(_service_teams_md())
+    (syn / "service_teams" / "FAQ-001_faq.md").write_text(_faq_md())
     facts["service_teams"] = [
         {"team": t, "coverage": c, "region": r, "contact": e} for t, c, r, e in TEAMS
     ]

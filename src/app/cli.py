@@ -19,10 +19,14 @@ corpus_app = typer.Typer()
 db_app = typer.Typer()
 eval_app = typer.Typer()
 evalset_app = typer.Typer()
+docs_app = typer.Typer()
+jobs_app = typer.Typer()
 app.add_typer(corpus_app, name="corpus")
 app.add_typer(db_app, name="db")
 app.add_typer(eval_app, name="eval")
 app.add_typer(evalset_app, name="evalset")
+app.add_typer(docs_app, name="docs")
+app.add_typer(jobs_app, name="jobs")
 
 log = get_logger(__name__)
 
@@ -139,13 +143,17 @@ def evalset_generate(output: Path | None = None):
 
 @eval_app.command("run")
 def eval_run(
+    suite: str = typer.Option("golden", "--suite"),
     limit: int = typer.Option(0, "--limit"),
+    repeat: int = typer.Option(1, "--repeat"),
     golden: Path | None = None,
+    fail_on_leak: bool = typer.Option(False, "--fail-on-leak"),
 ):
-    """Run the copilot over the golden set and write a report.
+    """Run an eval suite and write a report.
 
-    ``--limit`` caps the number of questions evaluated; ``--golden`` selects
-    an alternate JSONL file. Prints the generated report path.
+    ``--suite`` picks pr|dev|holdout|golden; ``--golden`` selects an
+    explicit JSONL file; ``--repeat`` reruns for variance; ``--fail-on-leak``
+    exits non-zero on any ACL leakage (release gate).
     """
     configure_logging()
     import sys
@@ -153,6 +161,77 @@ def eval_run(
     sys.path.insert(0, str(PROJECT_ROOT / "eval"))
     from runner import run_eval  # noqa: E402
 
-    path = golden or (get_settings().eval_dir / "golden_set.jsonl")
-    report = run_eval(path, limit=limit or None)
+    report = run_eval(suite, golden, limit=limit or None, repeat=repeat, fail_on_leak=fail_on_leak)
     typer.echo(f"report → {report}")
+
+
+# --- document lifecycle ----------------------------------------------------
+
+
+@docs_app.command("list")
+def docs_list(collection: str = typer.Option("agreements", "--collection")):
+    """List indexed doc_ids + chunk counts for a collection (pgvector side)."""
+    configure_logging()
+    from app.core.dependencies import get_vectorstore
+
+    docs = get_vectorstore().list_documents(collection)
+    for d in docs:
+        typer.echo(f"{d['doc_id']}  chunks={d['chunks']}  version={d.get('doc_version', '')}")
+    typer.echo(f"{len(docs)} documents")
+
+
+@docs_app.command("delete")
+def docs_delete(doc_id: str):
+    """Delete a document's chunks from pgvector, OpenSearch, and the registry."""
+    configure_logging()
+    from app.retrieval.indexing import delete_document
+
+    out = delete_document(doc_id)
+    typer.echo(f"deleted {doc_id}: pg={out['pg_deleted']} os={out['os_deleted']}")
+
+
+@docs_app.command("verify")
+def docs_verify():
+    """Report pgvector↔OpenSearch↔registry chunk parity per collection."""
+    configure_logging()
+    import json as _json
+
+    from app.retrieval.indexing import verify_consistency
+
+    typer.echo(_json.dumps(verify_consistency(), indent=2))
+
+
+@docs_app.command("index-info")
+def docs_index_info():
+    """Show the embedding-model registry (name/version/dim) per index."""
+    configure_logging()
+    import json as _json
+
+    from app.retrieval.indexing import index_info
+
+    typer.echo(_json.dumps(index_info(), indent=2, default=str))
+
+
+# --- ingestion jobs --------------------------------------------------------
+
+
+@jobs_app.command("list")
+def jobs_list(limit: int = typer.Option(20, "--limit")):
+    """List recent ingestion jobs with status/progress/metrics."""
+    configure_logging()
+    import json as _json
+
+    from app.data.ingest import jobs
+
+    typer.echo(_json.dumps(jobs.list_jobs(limit), indent=2, default=str))
+
+
+@jobs_app.command("dlq")
+def jobs_dlq(job_id: str | None = typer.Option(None, "--job"), limit: int = 100):
+    """List dead-lettered documents (optionally scoped to one job)."""
+    configure_logging()
+    import json as _json
+
+    from app.data.ingest import jobs
+
+    typer.echo(_json.dumps(jobs.dead_letters(job_id=job_id, limit=limit), indent=2, default=str))

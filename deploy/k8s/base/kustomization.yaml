@@ -3,8 +3,12 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - configmap.yaml
-  - secret.yaml
   - serviceaccount.yaml
   - backend.yaml
   - streamlit.yaml
+  - hpa.yaml
+  - pdb.yaml
   - ingress.yaml
+# NOTE: secret.yaml intentionally excluded — staging supplies the dev
+# placeholder secret itself; prod uses an ExternalSecret (no plaintext
+# secret material in the repo).

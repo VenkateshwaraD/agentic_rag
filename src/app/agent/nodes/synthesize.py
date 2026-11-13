@@ -1,14 +1,20 @@
 """Synthesize node — Claude drafts the cited reply (or emits a refusal).
 
+Handles partial/conflicting answerability caveats, validator feedback on
+the bounded re-synthesis pass, LLM outages (falls back to the offline
+extractive draft and records ``llm_unavailable``), and versioned citation
+objects enriched from retrieved chunk metadata.
+
 Author: venkateshwara doijode
 """
 
 import json
 import re
 
+from app.agent import budget
 from app.agent.llm import get_llm
-from app.agent.nodes.common import Timer, audit, load_prompt
-from app.core.constants import CITATION_PATTERN, EV_AGENT_STEP, REFUSAL_MESSAGE
+from app.agent.nodes.common import Timer, add_error, audit, load_prompt
+from app.core.constants import CITATION_PATTERN, EV_AGENT_STEP, REFUSAL_MESSAGE, Answerability
 
 _REFUSAL = REFUSAL_MESSAGE
 
@@ -20,21 +26,36 @@ def _format_evidence(state) -> str:
     redactor = get_pii_redactor()
     parts = []
     for r in state.get("retrieved", []):
-        parts.append(f"[{r['doc_id']} §{r['section']}] ({r['source']})\n{r['text']}")
+        meta = f"v{r['doc_version']}" if r.get("doc_version") else ""
+        eff = f" eff {r['effective_date']}" if r.get("effective_date") else ""
+        parts.append(f"[{r['doc_id']} §{r['section']}] ({r['source']}) {meta}{eff}\n{r['text']}")
     for tr in state.get("tool_results", []):
-        if tr["rows"]:
+        if tr.get("rows"):
             # raw system rows are PII-redacted before entering the context
             safe = redactor.redact(json.dumps(tr["rows"][:10], default=str))
             parts.append(f"[{tr['tool']} system]\n{safe}")
     return "\n\n---\n\n".join(parts) or "NO EVIDENCE RETRIEVED"
 
 
-def _extract_citations(draft: str) -> list[dict]:
-    """Parse ``[DOC-§section]`` markers from the draft into citation dicts."""
-    return [
-        {"doc_id": m.group(1), "section": m.group(2).strip()}
-        for m in re.finditer(CITATION_PATTERN, draft)
-    ]
+def _extract_citations(draft: str, retrieved: list[dict]) -> list[dict]:
+    """Parse ``[DOC-§section]`` markers and enrich with retrieved metadata.
+
+    Each citation is matched back to a retrieved chunk by (doc_id, section)
+    so it carries ``chunk_id``, ``doc_version`` and ``effective_date`` when
+    those fields are present in the index metadata.
+    """
+    citations = []
+    for m in re.finditer(CITATION_PATTERN, draft):
+        doc_id, section = m.group(1), m.group(2).strip()
+        cit = {"doc_id": doc_id, "section": section}
+        for r in retrieved:
+            if r.get("doc_id") == doc_id and str(r.get("section")) == section:
+                for k in ("chunk_id", "doc_version", "effective_date"):
+                    if r.get(k):
+                        cit[k] = r[k]
+                break
+        citations.append(cit)
+    return citations
 
 
 def _offline_draft(state) -> str:
@@ -45,39 +66,85 @@ def _offline_draft(state) -> str:
         snippet = r["text"].strip().split("\n")[0][:300]
         parts.append(f"- {snippet} [{r['doc_id']} §{r['section']}]")
     for tr in state.get("tool_results", []):
-        for row in tr["rows"][:3]:
+        for row in tr.get("rows", [])[:3]:
             parts.append(f"- {row} [{tr['tool']} system]")
     return "\n".join(parts)
+
+
+def _caveat_prefix(state) -> str:
+    """Build the caveat sentence prepended to PARTIAL / CONFLICTING answers."""
+    answerability = state.get("answerability")
+    if answerability == Answerability.CONFLICTING or state.get("conflicts"):
+        return (
+            "Note: the retrieved sources conflict on parts of this answer; "
+            "I've flagged the conflicting points where they appear. "
+        )
+    if answerability == Answerability.PARTIAL:
+        missing = "; ".join(state.get("unsupported_facts", [])) or "some requested facts"
+        return f"Note: I could only partially answer this — {missing}.\n\n"
+    return ""
+
+
+def has_rows(state) -> bool:
+    """Return True when any ops tool call produced at least one row."""
+    return any(tr.get("rows") for tr in state.get("tool_results", []))
 
 
 def synthesize(state):
     """Draft the final cited answer from the gathered evidence.
 
     Short-circuits to the refusal message when upstream already refused.
-    Otherwise builds the evidence prompt, calls the LLM (or the offline
-    extractive fallback), extracts citations, enforces the
-    citation-required policy, audits the step, and returns the reply plus
-    citations — or a refusal when the draft lacks required citations.
+    Otherwise builds the evidence prompt (with partial/conflict caveats and
+    validator feedback when re-synthesizing), calls the LLM — falling back
+    to the offline draft on timeout/error — extracts versioned citations,
+    enforces the citation-required policy, audits the step, and returns the
+    reply plus citations — or a refusal when the draft lacks citations.
     """
-    if state.get("refusal"):
-        return {"reply": _REFUSAL, "citations": []}
+    if state.get("refusal") or state.get("abstained"):
+        return {"reply": _REFUSAL if state.get("refusal") else state.get("reply"), "citations": []}
 
     evidence = _format_evidence(state)
-    prompt = (
-        load_prompt("system.md")
-        + "\n\n=== EVIDENCE ===\n"
-        + evidence
-        + f"\n\n=== QUESTION ===\n{state['question']}\n\nDraft reply:"
-    )
-    with Timer() as t:
-        from app.core.config import get_settings
-
-        draft = (
-            get_llm().invoke(prompt).content
-            if get_settings().anthropic_api_key
-            else _offline_draft(state)
+    updates: dict = {}
+    prompt = load_prompt("system.md") + "\n\n=== EVIDENCE ===\n" + evidence
+    if state.get("answerability") in (Answerability.PARTIAL, Answerability.CONFLICTING):
+        missing = "; ".join(state.get("unsupported_facts", []))
+        prompt += (
+            "\n\nThe evidence is incomplete or conflicting. Answer only what the "
+            "evidence supports, and explicitly say which parts could not be "
+            f"answered or are contradictory. Unanswered aspects: {missing or 'unspecified'}."
         )
-        citations = _extract_citations(draft)
+    if state.get("validation_feedback"):
+        # bounded re-synthesis pass — fix what the validator flagged
+        prompt += (
+            "\n\nA previous draft failed validation. Fix these problems — remove "
+            "unsupported claims and only cite passages that exist in the evidence: "
+            f"{state['validation_feedback']}"
+        )
+        updates["resynthesized"] = True
+    prompt += f"\n\n=== QUESTION ===\n{state['question']}\n\nDraft reply:"
+
+    from app.core.config import get_settings
+
+    with Timer() as t:
+        draft = ""
+        if get_settings().anthropic_api_key:
+            try:
+                response = get_llm().invoke(prompt)
+                updates.update(budget.record_llm_usage(state, response))
+                draft = response.content
+            except Exception as exc:
+                # LLM timeout / unavailable → degraded offline draft
+                updates["errors"] = add_error(state, f"synthesize.llm_failed: {exc}")
+        if not draft:
+            draft = _offline_draft(state)
+            if get_settings().anthropic_api_key:
+                updates["errors"] = add_error(
+                    {**state, "errors": updates.get("errors", [])},
+                    "synthesize.llm_unavailable: using offline draft",
+                )
+
+        draft = _caveat_prefix(state) + draft
+        citations = _extract_citations(draft, state.get("retrieved", []))
         has_sys_refs = any(
             f"[{tr['tool']} system]" in draft for tr in state.get("tool_results", [])
         )
@@ -88,7 +155,12 @@ def synthesize(state):
     audit(
         state,
         EV_AGENT_STEP,
-        {"node": "synthesize", "citations": citations, "has_sys_refs": has_sys_refs},
+        {
+            "node": "synthesize",
+            "citations": citations,
+            "has_sys_refs": has_sys_refs,
+            "resynthesized": updates.get("resynthesized", False),
+        },
         t.ms,
     )
     if refusal:
@@ -97,10 +169,6 @@ def synthesize(state):
             "refusal_reason": "draft lacked required citations",
             "reply": _REFUSAL,
             "citations": [],
+            **updates,
         }
-    return {"draft": draft, "reply": draft, "citations": citations}
-
-
-def has_rows(state) -> bool:
-    """Return True when any ops tool call produced at least one row."""
-    return any(tr["rows"] for tr in state.get("tool_results", []))
+    return {"draft": draft, "reply": draft, "citations": citations, **updates}

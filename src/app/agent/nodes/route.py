@@ -7,14 +7,16 @@ Author: venkateshwara doijode
 import json
 import re
 
+from app.agent import budget
 from app.agent.llm import get_llm
-from app.agent.nodes.common import Timer, audit, load_prompt
+from app.agent.nodes.common import Timer, add_error, audit, load_prompt
 from app.core.config import get_settings
 from app.core.constants import (
     COLLECTION_AGREEMENTS,
     COLLECTION_SERVICE_TEAMS,
     COLLECTION_SLAS,
     EV_AGENT_STEP,
+    Answerability,
 )
 
 ALL_SOURCES = [COLLECTION_AGREEMENTS, COLLECTION_SLAS, COLLECTION_SERVICE_TEAMS]
@@ -96,16 +98,21 @@ def route(state):
     and returns sources, ops calls, and routing extras — or a refusal.
     """
     principal = state["principal"]
+    updates: dict = {}
     with Timer() as t:
         decision = None
         if get_settings().anthropic_api_key:
-            prompt = load_prompt("route.md").format(
-                question=state["question"], clients=", ".join(principal.client_ids)
-            )
-            raw = get_llm().invoke(prompt).content
             try:
+                prompt = load_prompt("route.md").format(
+                    question=state["question"], clients=", ".join(principal.client_ids)
+                )
+                response = get_llm().invoke(prompt)
+                updates.update(budget.record_llm_usage(state, response))
+                raw = response.content
                 decision = json.loads(re.search(r"\{.*\}", raw, re.DOTALL).group(0))
-            except (AttributeError, json.JSONDecodeError):
+            except Exception as exc:
+                # LLM timeout/parse failure → heuristic fallback, not a crash
+                updates["errors"] = add_error(state, f"route.llm_failed: {exc}")
                 decision = None
         if decision is None:
             decision = _heuristic_route(state["question"])
@@ -147,6 +154,13 @@ def route(state):
         return {
             "refusal": True,
             "refusal_reason": f"client '{decision.get('client_id')}' not in user entitlements",
+            "answerability": Answerability.UNAUTHORIZED,
             "extra": extra,
+            **updates,
         }
-    return {"sources": sources, "ops_calls": [{"tool": o} for o in ops], "extra": extra}
+    return {
+        "sources": sources,
+        "ops_calls": [{"tool": o} for o in ops],
+        "extra": extra,
+        **updates,
+    }

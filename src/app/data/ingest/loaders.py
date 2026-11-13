@@ -1,12 +1,15 @@
 """Document loaders for synthetic and real corpora.
 
-Supported: .md, .txt, .csv, .pdf, .docx. Each loader returns the document's
-text content.
+Supported: .md, .txt, .csv, .pdf, .docx. ``parse_document`` wraps the raw
+loaders and returns a ``RawDocument`` — parse failures raise
+``CorruptedDocumentError`` so the ingestion pipeline can dead-letter
+corrupted files distinctly from unsupported or empty ones.
 
 Author: venkateshwara doijode
 """
 
 import csv
+from dataclasses import dataclass
 from pathlib import Path
 
 from app.core.errors import AppError
@@ -15,6 +18,32 @@ from app.core.logging import get_logger
 log = get_logger(__name__)
 
 SUPPORTED = {".md", ".txt", ".csv", ".pdf", ".docx"}
+
+
+@dataclass
+class RawDocument:
+    """A parsed source document: filesystem path plus extracted text."""
+
+    path: Path
+    text: str
+
+
+class CorruptedDocumentError(AppError):
+    """Raised when a supported file type fails to parse (truncated/binary/etc.)."""
+
+
+def parse_document(path: Path) -> RawDocument:
+    """Load a supported document and return it as a ``RawDocument``.
+
+    ``AppError`` (unsupported type) propagates unchanged; any other loader
+    failure is wrapped in ``CorruptedDocumentError`` for dead-lettering.
+    """
+    try:
+        return RawDocument(path=path, text=load_document(path))
+    except AppError:
+        raise
+    except Exception as exc:
+        raise CorruptedDocumentError(f"{path.name}: {exc}") from exc
 
 
 def load_document(path: Path) -> str:
@@ -45,11 +74,15 @@ def _load_csv(path: Path) -> str:
 
 
 def _load_pdf(path: Path) -> str:
-    """Extract and join text from every page of a PDF via pypdf."""
+    """Extract text per page, emitting ``<!-- page: N -->`` markers so chunk
+    metadata can preserve page numbers."""
     from pypdf import PdfReader
 
     reader = PdfReader(str(path))
-    return "\n".join(page.extract_text() or "" for page in reader.pages)
+    parts = []
+    for i, page in enumerate(reader.pages, start=1):
+        parts.append(f"<!-- page: {i} -->\n{page.extract_text() or ''}")
+    return "\n".join(parts)
 
 
 def _load_docx(path: Path) -> str:

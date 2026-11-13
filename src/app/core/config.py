@@ -55,17 +55,48 @@ class Settings(BaseSettings):
     dense_top_k: int = 20
     lexical_top_k: int = 20
     rrf_k: int = 60
+    rrf_dense_weight: float = 1.0
+    rrf_bm25_weight: float = 1.0
     rerank_candidates: int = 20
     final_top_k: int = 5
     reranker_model: str = "BAAI/bge-reranker-base"
+    # dense | bm25 | hybrid | hybrid_rerank | auto (classifier decides)
+    retrieval_strategy: str = "hybrid_rerank"
+    # exclude | down_rank — how expired/stale docs are handled at search time
+    doc_expiry_mode: str = "exclude"
+    parent_child_enabled: bool = False
+
+    # --- Agent execution budget ---
+    agent_max_iterations: int = 6  # hard: retrieve passes through the graph
+    agent_max_tool_calls: int = 10  # hard: total ops tool invocations
+    agent_max_tokens: int = 20_000  # soft: total LLM tokens (best-effort)
+    agent_max_elapsed_ms: int = 60_000  # hard: wall-clock per request
+    agent_max_cost_usd: float = 0.25  # soft: estimated LLM spend (best-effort)
+    agent_max_retries: int = 2  # bounded rewrite loop
+    llm_timeout_s: int = 30
+
+    # --- Ingestion ---
+    index_mode: str = "incremental"  # full | incremental
+    ingest_max_attempts: int = 3  # per-document retry before dead-letter
+    doc_version_policy: str = "latest"  # latest | keep_all
 
     # --- Ops tools ---
     ops_row_cap: int = 100
     ops_statement_timeout_ms: int = 10_000
+    ops_pool_size: int = 5
+    ops_pool_max_overflow: int = 5
+    ops_pool_timeout_s: int = 10
+
+    # --- Human review ---
+    human_review_enabled: bool = True
+    review_citation_threshold: float = 0.5
 
     # --- API ---
     api_host: str = "0.0.0.0"
     api_port: int = 8000
+    request_timeout_s: int = 60
+    idempotency_ttl_s: int = 86_400
+    stream_enabled: bool = True
 
     # --- Paths ---
     data_dir: Path = PROJECT_ROOT / "data"

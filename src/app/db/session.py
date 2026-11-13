@@ -7,6 +7,7 @@ from functools import lru_cache
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
+from sqlalchemy.pool import QueuePool
 
 from app.core.config import get_settings
 
@@ -20,9 +21,17 @@ def rag_engine() -> Engine:
 @lru_cache
 def ops_engine() -> Engine:
     """Read-only engine for ops tools. Connects as rag_readonly; a session-level
-    statement_timeout is applied as defense-in-depth."""
+    statement_timeout is applied as defense-in-depth. Pool is sized/timeout
+    bounded so a slow ops DB can't exhaust API connections."""
     settings = get_settings()
-    engine = create_engine(settings.ops_database_url, pool_pre_ping=True)
+    engine = create_engine(
+        settings.ops_database_url,
+        poolclass=QueuePool,
+        pool_size=5,
+        max_overflow=5,
+        pool_timeout=10,
+        pool_pre_ping=True,
+    )
 
     @event.listens_for(engine, "connect")
     def _set_readonly_session(dbapi_conn, _):
