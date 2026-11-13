@@ -25,6 +25,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "eval"))
 
 import metrics as M  # noqa: E402
+import ragas_config as RC  # noqa: E402
 from report import write_report  # noqa: E402
 
 SCENARIOS = ROOT / "eval" / "scenarios"
@@ -41,7 +42,13 @@ def _load_rows(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
-def _score_rows(rows: list[dict], users: dict, entitlements: dict, run_ragas: bool) -> dict:
+def _score_rows(
+    rows: list[dict],
+    users: dict,
+    entitlements: dict,
+    run_ragas: bool,
+    ragas_cfg: RC.RagasConfig | None = None,
+) -> dict:
     """Run every row through the graph once and compute per-row + aggregate metrics."""
     from app.agent.graph import answer
     from app.core.logging import get_logger
@@ -79,7 +86,7 @@ def _score_rows(rows: list[dict], users: dict, entitlements: dict, run_ragas: bo
     result = M.aggregate(per_row)
     if run_ragas:
         result["summary"].update(
-            {f"ragas_{k}": v for k, v in M.ragas_metrics(ragas_samples).items()}
+            {f"ragas_{k}": v for k, v in M.ragas_metrics(ragas_samples, ragas_cfg).items()}
         )
     result["n_questions"] = len(per_row)
     result["acl_leaks"] = sum(1 for r in per_row if r["metrics"]["acl_clean"] < 1.0)
@@ -93,11 +100,14 @@ def run_eval(
     repeat: int = 1,
     fail_on_leak: bool = False,
     run_ragas: bool = True,
+    ragas_config_path: Path | None = None,
+    fail_on_thresholds: bool = False,
 ) -> Path:
     """Execute the suite (optionally N times) and write a dated report.
 
     Returns the JSON report path; raises SystemExit(1) on ACL leakage when
-    ``fail_on_leak`` is set.
+    ``fail_on_leak`` is set, or when any configured Ragas threshold is
+    missed under ``fail_on_thresholds``.
     """
     from app.core.config import get_settings
     from app.core.logging import configure_logging, get_logger
@@ -105,6 +115,8 @@ def run_eval(
     configure_logging()
     log = get_logger("eval")
     s = get_settings()
+
+    ragas_cfg = RC.load_ragas_config(ragas_config_path)
 
     if not golden_path and suite not in SUITES:
         raise typer.BadParameter(f"unknown suite {suite!r} — pick {sorted(SUITES)}")
@@ -114,7 +126,7 @@ def run_eval(
     rows = _load_rows(dataset_path)[: limit or None]
 
     run_results = [
-        _score_rows(rows, users, entitlements, run_ragas=run_ragas and i == 0)
+        _score_rows(rows, users, entitlements, run_ragas=run_ragas and i == 0, ragas_cfg=ragas_cfg)
         for i in range(repeat)
     ]
     result = run_results[0]
@@ -122,6 +134,8 @@ def run_eval(
     if repeat > 1:
         result["variance"] = M.variance_summary([r["summary"] for r in run_results])
         result["runs"] = repeat
+    if ragas_cfg.thresholds:
+        result["threshold_checks"] = RC.threshold_checks(result["summary"], ragas_cfg.thresholds)
     report_path = write_report(result)
     log.info(
         "eval.done",
@@ -133,6 +147,14 @@ def run_eval(
     if fail_on_leak and result.get("acl_leaks"):
         log.error("eval.acl_leakage", leaks=result["acl_leaks"])
         raise SystemExit(1)
+    if fail_on_thresholds and any(
+        c["passed"] is False for c in result.get("threshold_checks", {}).values()
+    ):
+        failed = {
+            k: c for k, c in result.get("threshold_checks", {}).items() if c["passed"] is False
+        }
+        log.error("eval.threshold_breach", failed=failed)
+        raise SystemExit(1)
     return report_path
 
 
@@ -143,13 +165,27 @@ def main(
     repeat: int = 1,
     fail_on_leak: bool = False,
     ragas: bool = True,
+    ragas_config: Path | None = None,
+    fail_on_thresholds: bool = False,
 ):
     """Run an eval suite and write the report (prints the JSON report path).
 
     CLI: ``--suite pr|dev|holdout|golden --limit N --repeat N
-    --fail-on-leak --no-ragas``.
+    --fail-on-leak --no-ragas --ragas-config eval/ragas.yaml
+    --fail-on-thresholds``.
     """
-    print(run_eval(suite, golden, limit or None, repeat, fail_on_leak, ragas))
+    print(
+        run_eval(
+            suite,
+            golden,
+            limit or None,
+            repeat,
+            fail_on_leak,
+            ragas,
+            ragas_config,
+            fail_on_thresholds,
+        )
+    )
 
 
 if __name__ == "__main__":

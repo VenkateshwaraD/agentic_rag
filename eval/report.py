@@ -54,6 +54,15 @@ def write_report(result: dict) -> Path:
     for cat, stats in result.get("by_category", {}).items():
         vals = " | ".join(str(stats.get(k, "")) for k in result.get("summary", {}))
         lines.append(f"| {cat} | {stats.get('n')} | {vals} |")
+    checks = result.get("threshold_checks")
+    if checks:
+        lines.append("\n## Ragas quality gates\n")
+        lines.append("| metric | score | minimum | result |")
+        lines.append("|---|---|---|---|")
+        for name, c in checks.items():
+            verdict = {True: "pass", False: "**FAIL**", None: "not run"}[c["passed"]]
+            value = c["value"] if c["value"] is not None else "—"
+            lines.append(f"| {name} | {value} | {c['minimum']} | {verdict} |")
     variance = result.get("variance")
     if variance:
         lines.append("\n## Variance across runs\n")

@@ -127,13 +127,25 @@ def must_not_contain_metric(output: dict, row: dict) -> float:
     return 0.0 if any(b in reply for b in banned) else 1.0
 
 
-def ragas_metrics(samples: list[dict]) -> dict:
-    """Run Ragas over collected samples; returns {} if ragas/creds missing."""
+def ragas_metrics(samples: list[dict], cfg=None) -> dict:
+    """Run Ragas over collected samples; returns {} if disabled/creds missing.
+
+    ``cfg`` is a ``ragas_config.RagasConfig`` (defaults are loaded from
+    ``eval/ragas.yaml`` when not supplied) — it selects the metric subset,
+    judge model, run limits, and the env var the API key is read from.
+    """
+    if cfg is None:
+        import ragas_config
+
+        cfg = ragas_config.load_ragas_config()
+    if not cfg.enabled:
+        return {}
     try:
         from datasets import Dataset
         from langchain_anthropic import ChatAnthropic
         from ragas import evaluate
         from ragas.llms import LangchainLLMWrapper
+        from ragas.run_config import RunConfig
 
         try:
             from ragas.metrics.collections import (
@@ -157,23 +169,36 @@ def ragas_metrics(samples: list[dict]) -> dict:
         from app.core.config import get_settings
         from app.core.dependencies import get_embedder
 
+        all_metrics = {
+            "faithfulness": faithfulness,
+            "answer_relevancy": answer_relevancy,
+            "context_precision": context_precision,
+            "context_recall": context_recall,
+            "answer_correctness": answer_correctness,
+        }
+        chosen = [all_metrics[name] for name in cfg.metrics if name in all_metrics]
+        if not chosen:
+            return {}
+
         s = get_settings()
-        if not s.anthropic_api_key:
+        api_key = cfg.api_key(fallback=s.anthropic_api_key)
+        if not api_key:
             return {}
         ds = Dataset.from_list(samples)
         result = evaluate(
             ds,
-            metrics=[
-                faithfulness,
-                answer_relevancy,
-                context_precision,
-                context_recall,
-                answer_correctness,
-            ],
+            metrics=chosen,
             llm=LangchainLLMWrapper(
-                ChatAnthropic(model=s.anthropic_model, api_key=s.anthropic_api_key)
+                ChatAnthropic(model=cfg.model or s.anthropic_model, api_key=api_key)
             ),
             embeddings=LangchainEmbeddingsWrapper(get_embedder()),
+            run_config=RunConfig(
+                timeout=cfg.timeout_s,
+                max_retries=cfg.max_retries,
+                max_wait=cfg.max_wait_s,
+                max_workers=cfg.max_workers,
+                seed=cfg.seed,
+            ),
         )
         return {k: float(v) for k, v in result.items()}
     except Exception as exc:  # ragas API drift, missing creds, etc.

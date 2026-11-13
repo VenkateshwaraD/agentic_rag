@@ -1,0 +1,76 @@
+{
+  "summary": {
+    "acl_clean": 1.0,
+    "recall_bm25": 0.0,
+    "citation_correctness": 1.0,
+    "recall_fused": 0.0,
+    "tool_selection": 1.0,
+    "citation_precision": 0.0,
+    "recall_reranked": 0.0,
+    "answerability_correct": 0.0,
+    "citation_completeness": 1.0,
+    "recall_dense": 0.0,
+    "refusal_correct": 1.0,
+    "no_banned_content": 1.0,
+    "citation_recall": 0.0,
+    "unsupported_claim_rate": 0.0
+  },
+  "by_category": {
+    "doc_factual": {
+      "n": 1,
+      "acl_clean": 1.0,
+      "recall_bm25": 0.0,
+      "citation_correctness": 1.0,
+      "recall_fused": 0.0,
+      "tool_selection": 1.0,
+      "citation_precision": 0.0,
+      "recall_reranked": 0.0,
+      "answerability_correct": 0.0,
+      "citation_completeness": 1.0,
+      "recall_dense": 0.0,
+      "refusal_correct": 1.0,
+      "no_banned_content": 1.0,
+      "citation_recall": 0.0,
+      "unsupported_claim_rate": 0.0
+    }
+  },
+  "failures": [
+    {
+      "id": "PR-001",
+      "category": "doc_factual",
+      "question": "What is the outgoing domestic wire fee for bluepeak?",
+      "reply": "I don't have enough evidence in the client's entitled documents and systems to answer that reliably, so I'm not going to guess. Please escalate to the client's service team or check the system of record directly.",
+      "metrics": {
+        "citation_precision": 0.0,
+        "citation_recall": 0.0,
+        "recall_dense": 0.0,
+        "recall_bm25": 0.0,
+        "recall_fused": 0.0,
+        "recall_reranked": 0.0,
+        "unsupported_claim_rate": 0.0,
+        "answerability_correct": 0.0
+      }
+    }
+  ],
+  "n_questions": 1,
+  "acl_leaks": 0,
+  "version_snapshot": {
+    "model": "claude-sonnet-4-20250514",
+    "embedding": {
+      "provider": "bedrock",
+      "model": "amazon.titan-embed-text-v2:0",
+      "dim": 1024
+    },
+    "prompts": {
+      "grade.md": "5896d0ef5968",
+      "route.md": "b72971083301",
+      "system.md": "fc78c4d1860e"
+    },
+    "dataset": {
+      "path": "/home/ubuntu/Desktop/Agentic_RAG/eval/scenarios/pr.jsonl",
+      "rows": 1,
+      "sha256": "9e4661cad28b964c"
+    },
+    "git_sha": "a372675"
+  }
+}

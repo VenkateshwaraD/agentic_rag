@@ -1,224 +1,336 @@
 # Ragas Evaluation Guide
 
-How the Ragas LLM-judged metrics are wired into this project's eval harness,
-how to configure them, add test cases, run a suite, and review the results
-and evidence.
+**Audience:** everyone — engineers, reviewers, and non-technical stakeholders.
+Each section starts with a plain-language explanation; the technical commands
+and file paths follow in *"For engineers"* blocks.
 
 Author: venkateshwara doijode
 
 ---
 
-## 1. What gets measured
+## 0. The 60-second version
 
-The runner feeds each scenario row through the agent (`answer()`), then
-hands Ragas four fields per row (`eval/runner.py::_score_rows`):
+Our copilot answers client questions by reading documents and database
+records. **Ragas is an independent grader** — a second AI that reads each
+answer and scores it the way a strict examiner would: *is this true? did it
+actually answer the question? did it use the right source material?*
 
-| Ragas field | Populated from |
+Why we run it: our own tests check mechanics ("did the system reply?"),
+but only a grader that understands language can check *quality* ("was the
+reply correct and well-supported?"). Ragas gives us that quality check —
+automatically, on every release.
+
+The scores are 0 to 1, like exam percentages. **1.0 = perfect. Anything
+below ~0.8 deserves a look.**
+
+---
+
+## 1. What Ragas measures — the five report cards
+
+Every question we send through the system gets graded on five dimensions.
+Think of them as five different red pens:
+
+| Metric | Plain-English question it answers | Example of a failure |
+|---|---|---|
+| **faithfulness** | "Did the AI make anything up?" | Answer says the wire fee is $15 when the document says $12.73 |
+| **answer_relevancy** | "Did it actually answer what was asked?" | User asks "what's the fee?" and gets a paragraph about office hours |
+| **context_precision** | "Did it grab the *right* documents?" | It pulled 5 documents but only 1 was relevant — noise drowns signal |
+| **context_recall** | "Did it find *all* the documents needed?" | The answer needed both the SLA *and* the fee schedule; it only found the SLA |
+| **answer_correctness** | "Is the answer close to the known right answer?" | Compares to a reference answer we wrote by hand |
+
+Two groups worth noticing:
+
+- **Answer quality** — `faithfulness`, `answer_relevancy`, `answer_correctness`:
+  is the *output* good?
+- **Search quality** — `context_precision`, `context_recall`: is the
+  *retrieval engine* fetching the right material? A bad answer with good
+  retrieval points at a writing problem; a bad answer with bad retrieval
+  points at a search problem. This split is what makes the scores actionable.
+
+## 2. How the grading pipeline works
+
+For each test question, four things happen:
+
+```
+Question ──► our copilot answers ──► answer + the documents it used
+                                          │
+                                          ▼
+                                   Ragas judge (an AI examiner)
+                                          │
+                                          ▼
+                              scores + a pass/fail report
+```
+
+The judge receives, per question:
+
+| What the judge sees | In plain terms |
 |---|---|
-| `user_input` | the scenario `question` |
-| `response` | the agent's final `reply` |
-| `retrieved_contexts` | text of every retrieved chunk (or `"<none>"`) |
-| `reference` | the scenario's `expected_answer` |
+| `user_input` | the question we asked |
+| `response` | the copilot's actual answer |
+| `retrieved_contexts` | every document excerpt the copilot read |
+| `reference` | the correct answer *we* wrote — the answer key |
 
-Metrics computed (`eval/metrics.py::ragas_metrics`):
+Two honest caveats:
 
-| Metric | Judge asks |
-|---|---|
-| `faithfulness` | is every claim in the answer supported by retrieved context? |
-| `answer_relevancy` | does the answer address the question? |
-| `context_precision` | are the retrieved chunks relevant, ranked well? |
-| `context_recall` | does retrieval cover what the reference needs? |
-| `answer_correctness` | semantic similarity of answer vs `reference` |
+1. **The judge is an AI too.** It can be wrong — treat scores as a strong
+   signal, not a verdict. Section 7 shows how to check the underlying
+   evidence when a score looks suspicious.
+2. **No API key, no scores.** The judge needs an Anthropic API key to run.
+   Without one the whole Ragas block is skipped and the report shows only
+   our mechanical checks (citations, access-control, refusals) — which
+   still run for free.
 
-All five are LLM-judged — they need a working judge model, not just embeddings.
+## 3. Setup — what needs to be configured
 
-## 2. Configuration
+### 3a. The API key (required to get scores)
 
-Ragas only runs when an Anthropic key is configured; otherwise
-`ragas_metrics` returns `{}` and the report simply has no `ragas_*` keys.
+The judge calls Anthropic's Claude model, which needs a key:
 
 ```bash
-# required — gates the whole ragas block
 export ANTHROPIC_API_KEY=sk-ant-...
+```
 
-# optional — judge model (default comes from Settings.anthropic_model)
-export ANTHROPIC_MODEL=claude-sonnet-4-5-20250929
+The same key also switches the copilot from canned draft answers to real
+AI-written answers — **so without a key, the judge ends up grading drafts,
+not real prose.** Scores from a keyless run smoke-test the plumbing only;
+don't treat them as quality numbers.
 
-# embeddings for answer_relevancy — uses the app's configured embedder
-export EMBEDDING_PROVIDER=local          # or bedrock in prod
+### 3b. `eval/ragas.yaml` — the control panel (new)
 
-# stores must be reachable for the agent to produce real answers
+Everything else is in one small file, `eval/ragas.yaml`. No code changes
+needed to retune the judge:
+
+```yaml
+enabled: true                    # master switch — same as --no-ragas
+
+judge:
+  model: ""                      # blank = use the app's configured model
+  api_key_env: ANTHROPIC_API_KEY # which env var holds the key (not the key itself)
+
+metrics:                         # comment a line out to skip that report card
+  - faithfulness
+  - answer_relevancy
+  - context_precision
+  - context_recall
+  - answer_correctness
+
+run:                             # judge-call limits
+  timeout_s: 180                 # give up on a single grading call after 3 min
+  max_retries: 3                 # retry flaky calls
+  max_workers: 8                 # grade up to 8 questions in parallel
+  seed: 42                       # reproducibility
+
+thresholds: {}                   # quality gate — see below
+```
+
+When might you edit it?
+
+- **Skip a metric** — e.g. remove `context_recall` when your test set has
+  no hand-written reference answers to compare against (it can't score
+  "did we find everything" without an answer key).
+- **Tighten the loop** — raise `max_retries`/`timeout_s` if judge calls
+  time out on big suites; lower `max_workers` if you hit rate limits.
+- **Enforce a quality floor** — add thresholds, then run with
+  `--fail-on-thresholds` to turn it into a release gate:
+
+  ```yaml
+  thresholds:
+    faithfulness: 0.80        # "never ship a run that makes things up >20% of the time"
+    context_precision: 0.70
+  ```
+
+  Now `eval/runner.py --suite holdout --fail-on-thresholds` exits non-zero
+  when any score dips below its floor — the same way `--fail-on-leak`
+  already gates on data-access violations.
+
+### 3c. Supporting services (for engineers)
+
+```bash
+export EMBEDDING_PROVIDER=local              # embedder for relevancy scoring
 export DATABASE_URL=postgresql://rag:rag@localhost:5432/ragdb
 export OPENSEARCH_URL=http://localhost:9200
 export OPS_DATABASE_URL=postgresql://rag_readonly:readonly@localhost:5432/opsdb
 export OPS_ADMIN_DATABASE_URL=postgresql://rag:rag@localhost:5432/opsdb
 ```
 
-Same key also enables real LLM synthesis — **without it the replies are
-`[offline-draft]` heuristics**, and Ragas ends up judging bullet echoes of
-the retrieved chunks, not real prose. Scores from offline runs are not
-representative; use them only to smoke-test the plumbing.
+## 4. Adding a test case — the "exam question" format
 
-Internals, for reference:
+Tests are plain-text files, one JSON object per line — think of each line
+as an exam card with a question on the front and the grading rubric on
+the back. Suites live in `eval/scenarios/`:
 
-- `eval/metrics.py::ragas_metrics` builds `ChatAnthropic(model=s.anthropic_model,
-  api_key=s.anthropic_api_key)` wrapped in `LangchainLLMWrapper`, and wraps
-  `get_embedder()` in `LangchainEmbeddingsWrapper`.
-- Any exception (API drift, rate limit, missing creds) is caught and
-  reported as `{"ragas_error": "..."}` in the summary — the run never
-  crashes on a Ragas failure.
-- Ragas runs once per eval invocation even with `--repeat N` (repeat runs
-  measure variance of the deterministic metrics, not of the judge).
-
-## 3. Adding test cases
-
-Scenarios are JSONL files. Suites live in `eval/scenarios/`:
-
-| Suite | File | Purpose |
+| File | Purpose | When it runs |
 |---|---|---|
-| `pr` | `scenarios/pr.jsonl` | small fast set run in PR CI |
-| `dev` | `scenarios/dev.jsonl` | broader development set |
-| `holdout` | `scenarios/holdout.jsonl` | release-gating set — do not tune to it |
-| `golden` | `golden_set.jsonl` | generated ~85-question set (`generate_evalset.py`) |
+| `pr.jsonl` | tiny fast smoke set | every pull request |
+| `dev.jsonl` | the working set | development |
+| `holdout.jsonl` | the grading set | release gates — **never tuned to** |
+| `golden_set.jsonl` | large generated set | broad coverage runs |
 
-Add one JSON object per line:
+One card, annotated:
 
 ```json
 {
-  "id": "DEV-023",
-  "question": "What is the SEV-1 first-response target for treasury services?",
-  "category": "doc_factual",
-  "user_id": "u_agent1",
-  "expected_answer": "The SEV-1 first-response target is 15 minutes.",
-  "key_points": ["15 minutes"],
-  "required_doc_ids": ["SLA-004"],
-  "required_tool_calls": [],
-  "must_refuse": false,
-  "must_not_contain": [],
-  "expected_answerability": "fully_answerable"
+  "id": "DEV-023",                                     // unique name
+  "question": "What is the SEV-1 first-response target?",  // what's asked
+  "category": "doc_factual",                           // groups results in reports
+  "user_id": "u_agent1",                               // which test user asks it
+  "expected_answer": "The target is 15 minutes.",      // the answer key
+  "required_doc_ids": ["SLA-004"],                     // which docs SHOULD be found
+  "required_tool_calls": [],                           // which DB tools SHOULD be used
+  "must_refuse": false,                                // true = correct answer is "can't say"
+  "must_not_contain": [],                              // strings that must NEVER appear
+  "expected_answerability": "fully_answerable"         // expected verdict type
 }
 ```
 
-Field semantics:
+Field guidance:
 
-| Field | Used for |
-|---|---|
-| `question` | sent to the agent; also Ragas `user_input` |
-| `expected_answer` | Ragas `reference` — required for `answer_correctness`/`context_recall` to score well |
-| `required_doc_ids` | citation precision/recall + per-stage retrieval recall |
-| `required_tool_calls` | tool-selection metric (e.g. `["accounts","tickets"]`) |
-| `must_refuse` | refusal/adversarial scenarios |
-| `must_not_contain` | strings that must never appear in the reply (PII, secrets) |
-| `expected_answerability` | `fully_answerable` / `partially_answerable` / `insufficient_evidence` / `conflicting_evidence` / `unauthorized` |
-| `category` | `doc_factual`, `multi_doc`, `multi_hop`, `adversarial`, `unanswerable`, `conflicting_evidence`, `expired_doc`, `ops_tool` — drives per-category rollup |
-| `user_id` | principal from `db/seed/users.json` — pick one whose `client_ids` match the scenario |
+- **`expected_answer` matters most for Ragas** — it's the answer key the
+  judge compares against. Write it as a complete factual sentence.
+- **`must_refuse: true`** creates a security test — e.g. a user asking
+  about a client they aren't entitled to. The correct answer is a refusal.
+- **`user_id` controls access** — pick a user from `db/seed/users.json`
+  whose client list matches your scenario. To test a *denial*, pick one
+  who is not entitled.
+- **Verify against `data/synthetic/facts.json`** before committing — the
+  #1 cause of false test failures is a test card that disagrees with the
+  generated data.
 
-Tips:
-
-- For `context_recall`/`answer_correctness` write `expected_answer` as a
-  complete, factual sentence — it's the judge's ground truth.
-- For ACL tests use a `user_id` that is *not* entitled to the named client.
-- Verify expectations against `data/synthetic/facts.json` before committing
-  a scenario — drift between scenarios and generated data is the top cause
-  of false failures.
-
-## 4. Running
+## 5. Running the evaluation
 
 ```bash
-# full dev suite with ragas (default)
+# the standard run — full dev suite, Ragas on
 python3 eval/runner.py --suite dev
 
-# smoke-test plumbing on a few rows
+# quick smoke test — 3 questions only
 python3 eval/runner.py --suite pr --limit 3
 
-# deterministic metrics only — no judge calls, no cost
+# mechanical checks only — no judge calls, zero cost
 python3 eval/runner.py --suite dev --no-ragas
 
-# variance across 3 runs (ragas still only runs once)
-python3 eval/runner.py --suite dev --repeat 3
-
-# release gate — exit 1 on any ACL leak
+# release gate — fail if any access-control leak
 python3 eval/runner.py --suite holdout --fail-on-leak
 
-# ad-hoc file
-python3 eval/runner.py --golden path/to/my_scenarios.jsonl
+# release gate — fail if any configured Ragas threshold is missed
+python3 eval/runner.py --suite holdout --fail-on-thresholds
+
+# use a different config file
+python3 eval/runner.py --suite dev --ragas-config eval/ragas-experimental.yaml
 ```
 
-Requires Docker services up (`sudo docker compose up -d postgres opensearch`),
-the DB seeded (`copilot db init`), and the corpus indexed (`copilot index`).
+What you'll see: progress logs per question, then a path to the report,
+e.g. `eval/reports/eval_20261113_155313.json`.
 
-The command prints the JSON report path, e.g.
-`eval/reports/eval_20261113_142715.json`.
+Prerequisites for a live run: Docker services up
+(`sudo docker compose up -d postgres opensearch`), seed data loaded
+(`copilot db init`), and the document index built (`copilot index`).
 
-## 5. Viewing results
+## 6. Reading the results
 
 Each run writes two files to `eval/reports/`:
 
-- `eval_<ts>.json` — machine-readable: `summary`, `by_category`,
-  `failures`, `n_questions`, `acl_leaks`, `version_snapshot` (model /
-  embedding / dataset / git-sha stamps), `variance` when `--repeat > 1`.
-- `eval_<ts>.md` — the same data rendered for humans.
+- `eval_<timestamp>.md` — human-readable, open this one
+- `eval_<timestamp>.json` — the same data, machine-readable
 
-Ragas scores appear in `summary` (and `by_category`) prefixed with `ragas_`:
+A summary table looks like:
 
 ```json
 {
   "summary": {
-    "citation_precision": 0.53,
     "acl_clean": 1.0,
+    "citation_precision": 0.53,
     "ragas_faithfulness": 0.87,
     "ragas_answer_relevancy": 0.82,
-    "ragas_context_precision": 0.74,
-    "ragas_context_recall": 0.79,
-    "ragas_answer_correctness": 0.68
+    "ragas_context_precision": 0.74
+  },
+  "threshold_checks": {
+    "faithfulness": {"value": 0.87, "minimum": 0.80, "passed": true}
   }
 }
 ```
 
-If `ragas_*` keys are absent → the judge never ran (no API key).
-If `ragas_error` is present → the judge ran and failed; the string says why.
+How to read it:
 
-## 6. Reviewing test evidence
+- **`ragas_` prefix = judge-scored.** Absent entirely → the judge never
+  ran (no API key). `ragas_error` present → the judge ran and failed;
+  the message says why.
+- **`threshold_checks`** — only present when `thresholds:` is configured;
+  `passed` is `true`, `false`, or `null` (score missing).
+- **Non-`ragas_` metrics are our own mechanical checks** — free, fast,
+  deterministic. `acl_clean: 1.0` means no access-control violations
+  (the zero-tolerance one).
+- **By-category tables** break the same scores down by question type —
+  e.g. "unauthorized" should always score perfectly; "conflicting_evidence"
+  is where honest weaknesses show.
 
-The report's `failures` array lists every row that scored below max on any
-metric — id, category, question, full reply text, and which metrics missed.
+## 7. Reviewing the evidence — tracing a bad score
 
-Per-row evidence beyond the report:
+A low score is a question, not an answer. The report's `failures` array
+lists every row that missed on any metric — question, reply, and which
+scores were low. To go deeper:
 
-- **Audit trail** — every eval row runs with `request_id = eval-<ID>-<hex>`;
-  query `audit_events` for that id to see the exact node-by-node payload:
-
-  ```sql
-  SELECT event_type, payload, latency_ms
-  FROM audit_events WHERE request_id LIKE 'eval-DEV-004-%' ORDER BY id;
-  ```
-
-- **Review queue** — answers flagged ambiguous/high-impact/failed-validation
-  land in `review_queue`; list via `GET /api/v1/admin/review`
-  (`X-Admin-Token`) or inspect the table directly.
-
-- **Retrieval diagnostics** — each answer carries per-collection
-  `diagnostics` (dense_ids / bm25_ids / fused_ids / reranked_ids, counts,
-  stale/parent-expansion flags). Reproduce a row live:
+- **The audit trail** — every test runs with a request id like
+  `eval-DEV-004-a1b2c3`; query `audit_events` for it to replay the exact
+  step-by-step decisions (which documents were fetched, what the tools
+  returned, why the answer was shaped that way).
+- **The review queue** — answers the system itself flagged as risky or
+  low-confidence land in `review_queue` for human sign-off.
+- **The `validation` field** — each answer carries a per-claim record of
+  which statements were cited and supported. This is our *internal*
+  faithfulness check; when it and Ragas disagree, look at the raw passages.
+- **Re-run one question live** to watch the diagnostics:
 
   ```bash
   curl -X POST http://localhost:8090/api/v1/answer \
     -H "X-API-Key: dev-key-1" -H "X-User-Id: u_agent1" \
     -H "Content-Type: application/json" \
-    -d '{"question": "<the failing question>", "client_id": "<client>"}'
+    -d '{"question": "<the failing question>"}'
   ```
 
-- **Validation detail** — the answer's `validation` field shows per-claim
-  `cited`/`supported` verdicts, `invalid_citations`, and `contradictions`
-  — this is the local analogue of `faithfulness`; cross-check it when
-  Ragas faithfulness disagrees.
+## 8. FAQ (the questions managers actually ask)
 
-## 7. Troubleshooting
+**How much does it cost?** Judge calls are LLM calls — roughly one per
+metric per question. A 22-question suite × 5 metrics ≈ 110 small calls.
+`--no-ragas` runs are free.
 
-| Symptom | Cause |
+**Can the judge be wrong?** Yes — it's an AI. Treat scores as a smoke
+alarm, not a court verdict. Always spot-check a low score against the
+`failures` evidence before acting on it.
+
+**Why did scores drop after a release?** Check `version_snapshot` in the
+report — it records the model, embedder, prompt hashes, dataset hash, and
+git SHA. Comparing snapshots between two runs shows exactly what changed.
+
+**What's a "good" score?** There's no universal bar — it depends on the
+domain. Our convention: access-control and refusal metrics must be 1.0
+(non-negotiable); Ragas scores ≥0.8 are healthy, 0.6–0.8 is a
+conversation, <0.6 is a problem.
+
+**Why is answerability/refusal accuracy not 1.0?** Those rows cover
+deliberately hard cases — ambiguous questions, conflicting documents,
+denied access. Some misses are expected while the system matures; the
+trend matters more than the point value.
+
+## 9. Glossary
+
+| Term | Meaning |
+|---|---|
+| **Judge** | the AI model that grades answers (Claude, via Anthropic API) |
+| **Context / passage** | a document excerpt the copilot retrieved |
+| **Reference / ground truth** | the correct answer, written by a human |
+| **Scenario / suite** | a test question / a collection of them |
+| **Hallucination** | an answer that states something the sources don't support — what `faithfulness` catches |
+| **ACL** | access-control list — who may see which client's data |
+| **PII** | personally identifiable information — names, emails, phones |
+| **Release gate** | an automatic pass/fail check that can block a release |
+
+## 10. Troubleshooting
+
+| Symptom | Likely cause |
 |---|---|
 | No `ragas_*` keys in report | `ANTHROPIC_API_KEY` unset — judge skipped by design |
-| `ragas_error` in summary | API/network/key failure — read the message |
-| `context_recall` low | reference answer states facts the index doesn't contain — check `data/synthetic/facts.json` |
-| `answer_correctness` low offline | expected — heuristic drafts aren't real answers; rerun with an LLM configured |
-| Import error on `ragas.metrics` | version drift — code tries `ragas.metrics.collections` (>=0.4) then `ragas.metrics`; check installed version |
+| `ragas_error` in summary | judge call failed (key/network/API drift) — read the message |
+| `ragas.yaml` rejected at startup | unknown metric name — the error lists valid ones |
+| `context_recall` always low | test rows lack good `expected_answer` references — or drop the metric in `ragas.yaml` |
+| All scores low on a no-key run | expected — without a key the copilot emits draft answers; set the key and rerun |
+| Threshold gate fails on missing scores | the judge didn't run — check the API key before blaming quality |

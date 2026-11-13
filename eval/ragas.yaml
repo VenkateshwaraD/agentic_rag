@@ -1,0 +1,30 @@
+# Ragas judge configuration — eval-only settings for the LLM-judged metrics.
+# Secrets stay in environment variables; this file names which one to read.
+enabled: true
+
+judge:
+  model: ""                    # blank → falls back to Settings.anthropic_model
+  api_key_env: ANTHROPIC_API_KEY
+
+# Metric subset — comment out a line to skip it.
+# context_recall needs a real expected_answer (reference) per row.
+metrics:
+  - faithfulness
+  - answer_relevancy
+  - context_precision
+  - context_recall
+  - answer_correctness
+
+# Judge-call runtime (ragas RunConfig).
+run:
+  timeout_s: 180
+  max_retries: 3
+  max_wait_s: 60
+  max_workers: 8
+  seed: 42
+
+# Release gate — any ragas_* summary score below its floor fails the run
+# when --fail-on-thresholds is passed. Leave empty to record only.
+thresholds: {}
+  # faithfulness: 0.80
+  # context_precision: 0.70
