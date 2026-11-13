@@ -75,5 +75,6 @@ ignore = ["E501"]
 [tool.mypy]
 python_version = "3.12"
 mypy_path = "src"
+exclude = "src/ui"  # streamlit app.py collides with the `app` package name
 ignore_missing_imports = true
 warn_unused_ignores = true

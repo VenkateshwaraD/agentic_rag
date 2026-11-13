@@ -112,5 +112,5 @@ class VectorStore:
         sql_pos = re.sub(r":\w+", "%s", sql)
         with self._connect() as conn, conn.cursor() as cur:
             cur.execute(sql_pos, values)
-            cols = [d.name for d in cur.description]
+            cols = [d.name for d in cur.description or []]
             return [dict(zip(cols, r, strict=True)) for r in cur.fetchall()]

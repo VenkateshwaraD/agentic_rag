@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     opensearch_url: str = "http://localhost:9200"
 
     # --- Auth (prototype) ---
-    api_keys: str = "dev-key-1"
+    api_keys: str = "dev-key-1,dev-key-2"  # dev fixture keys (db/seed/users.json)
     users_file: Path = PROJECT_ROOT / "db" / "seed" / "users.json"
     admin_token: str = "admin-dev-token"
 

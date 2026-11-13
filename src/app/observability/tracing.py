@@ -1,10 +1,12 @@
 """Langfuse tracing — graceful no-op when keys aren't configured.
 
-Supports both langfuse v2 (`langfuse.callback`) and v3
-(`langfuse.langchain`) import paths. The request's trace_id is propagated
+Langfuse v3+ SDK reads LANGFUSE_SECRET_KEY / LANGFUSE_HOST from env; we set
+them from Settings before constructing the handler. Falls back to the v2
+`langfuse.callback` path on older SDKs. The request's trace_id propagates
 to audit rows and the X-Trace-Id response header.
 """
 
+import os
 from typing import Any
 
 from app.core.config import get_settings
@@ -19,16 +21,20 @@ def build_callback_handler() -> tuple[Any | None, str | None]:
     if not settings.langfuse_enabled:
         return None, None
     try:
+        os.environ.setdefault("LANGFUSE_SECRET_KEY", settings.langfuse_secret_key)
+        os.environ.setdefault("LANGFUSE_HOST", settings.langfuse_host)
         try:
-            from langfuse.langchain import CallbackHandler  # v3
-        except ImportError:
-            from langfuse.callback import CallbackHandler  # v2
+            from langfuse.langchain import CallbackHandler  # v3+
 
-        handler = CallbackHandler(
-            public_key=settings.langfuse_public_key,
-            secret_key=settings.langfuse_secret_key,
-            host=settings.langfuse_host,
-        )
+            handler = CallbackHandler(public_key=settings.langfuse_public_key)
+        except ImportError:
+            from langfuse.callback import CallbackHandler as V2Handler
+
+            handler = V2Handler(
+                public_key=settings.langfuse_public_key,
+                secret_key=settings.langfuse_secret_key,
+                host=settings.langfuse_host,
+            )
         return handler, "copilot-answer"
     except Exception as exc:
         log.warning("tracing.disabled", reason=str(exc))
