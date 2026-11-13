@@ -359,7 +359,10 @@ user, type a question; citations and answerability appear under each reply.
 
 **A.3 — One live answer.** The question, the reply, its versioned
 citations, and the claim-level validation the *internal* checker produced
-— this is the per-row evidence Ragas scores sit on top of.
+— this is the per-row evidence Ragas scores sit on top of. The raw JSON
+behind this screenshot is committed at
+[`samples/answer_example.json`](samples/answer_example.json) — reply,
+citations, retrieved chunks, claim validation, budget, and diagnostics.
 
 ![live answer](screenshots/answer_example.png)
 

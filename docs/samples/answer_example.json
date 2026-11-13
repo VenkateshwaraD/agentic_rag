@@ -1,0 +1,166 @@
+{
+  "_note": "Live /api/v1/answer response \u2014 offline heuristic draft (no ANTHROPIC_API_KEY configured). Captured 2026-11-13 against commit 23ecc4b.",
+  "request": {
+    "question": "What is the outgoing domestic wire fee for bluepeak and when are statements produced?",
+    "client_id": "bluepeak",
+    "user": "u_agent1"
+  },
+  "response": {
+    "reply": "[offline-draft \u2014 no LLM configured] Based on the retrieved evidence:\n- The following fees apply to services rendered under this Agreement: [AGR-002 \u00a7\u00a72 Fee Schedule]\n- Account statements are produced on a monthly basis. Clients on monthly [AGR-002 \u00a7\u00a73 Statement Terms]\n- This Client Services Agreement (\"Agreement\") is entered into between Example Bank N.A. [AGR-002 \u00a7\u00a71 Parties and Scope]",
+    "citations": [
+      {
+        "doc_id": "AGR-002",
+        "section": "\u00a72 Fee Schedule",
+        "chunk_id": "AGR-002:v2.0:2-fee-schedule:2",
+        "doc_version": "2.0",
+        "effective_date": "2024-11-01"
+      },
+      {
+        "doc_id": "AGR-002",
+        "section": "\u00a73 Statement Terms",
+        "chunk_id": "AGR-002:v2.0:3-statement-terms:3",
+        "doc_version": "2.0",
+        "effective_date": "2024-11-01"
+      },
+      {
+        "doc_id": "AGR-002",
+        "section": "\u00a71 Parties and Scope",
+        "chunk_id": "AGR-002:v2.0:1-parties-and-scope:1",
+        "doc_version": "2.0",
+        "effective_date": "2024-11-01"
+      }
+    ],
+    "retrieved": [
+      {
+        "doc_id": "AGR-002",
+        "section": "\u00a72 Fee Schedule",
+        "text": "The following fees apply to services rendered under this Agreement:\n\n| Service | Fee |\n|---|---|\n| Outgoing domestic wire transfer | $12.73 per item |\n| ACH origination (per item) | $0.16 |\n| Monthly account maintenance | $324.50 |\n| Paper statement delivery | $15.05 per statement |\n\nFees are debited monthly in arrears from the Client's designated operating account.\nElectronic statements are provided at no charge.",
+        "client_id": "bluepeak",
+        "source": "agreements",
+        "chunk_id": "AGR-002:v2.0:2-fee-schedule:2",
+        "doc_version": "2.0",
+        "effective_date": "2024-11-01",
+        "rerank_score": 0.4295707643032074
+      },
+      {
+        "doc_id": "AGR-002",
+        "section": "\u00a73 Statement Terms",
+        "text": "Account statements are produced on a monthly basis. Clients on monthly\nreporting may request ad-hoc intraday statements through the Statements & Reporting\nteam; ad-hoc requests are subject to the paper statement fee listed in \u00a72 unless\ndelivered electronically.",
+        "client_id": "bluepeak",
+        "source": "agreements",
+        "chunk_id": "AGR-002:v2.0:3-statement-terms:3",
+        "doc_version": "2.0",
+        "effective_date": "2024-11-01",
+        "rerank_score": 0.14828181266784668
+      },
+      {
+        "doc_id": "AGR-002",
+        "section": "\u00a71 Parties and Scope",
+        "text": "This Client Services Agreement (\"Agreement\") is entered into between Example Bank N.A.\n(\"Bank\") and BluePeak Capital Partners (\"Client\", client_id `bluepeak`), a enterprise\nclient domiciled in the region served by the Treasury Support team. This Agreement governs\ncash-management, payments, and reporting services.",
+        "client_id": "bluepeak",
+        "source": "agreements",
+        "chunk_id": "AGR-002:v2.0:1-parties-and-scope:1",
+        "doc_version": "2.0",
+        "effective_date": "2024-11-01",
+        "rerank_score": 0.002730443375185132
+      },
+      {
+        "doc_id": "AGR-002",
+        "section": "\u00a74 Amendments",
+        "text": "This Agreement (version 2.0, effective 2024-11-01) may be amended upon thirty (30)\ndays written notice. Continued use of services constitutes acceptance of amendments.\nService-related inquiries are handled by the Treasury Support team per \u00a71.",
+        "client_id": "bluepeak",
+        "source": "agreements",
+        "chunk_id": "AGR-002:v2.0:4-amendments:4",
+        "doc_version": "2.0",
+        "effective_date": "2024-11-01",
+        "rerank_score": 9.829098416958004e-05
+      }
+    ],
+    "tool_calls": [],
+    "refusal": false,
+    "abstained": false,
+    "answerability": "fully_answerable",
+    "pending_review": false,
+    "unsupported_facts": [],
+    "validation": {
+      "claims": [
+        {
+          "text": "The following fees apply to services rendered under this Agreement: [AGR-002 \u00a7\u00a72 Fee Schedule]",
+          "cited": true,
+          "supported": true
+        },
+        {
+          "text": "Account statements are produced on a monthly basis.",
+          "cited": true,
+          "supported": true
+        },
+        {
+          "text": "Clients on monthly [AGR-002 \u00a7\u00a73 Statement Terms]",
+          "cited": true,
+          "supported": true
+        },
+        {
+          "text": "This Client Services Agreement (\"Agreement\") is entered into between Example Bank N.A.",
+          "cited": true,
+          "supported": true
+        },
+        {
+          "text": "[AGR-002 \u00a7\u00a71 Parties and Scope]",
+          "cited": true,
+          "supported": true
+        }
+      ],
+      "unsupported_claims": [],
+      "invalid_citations": [],
+      "contradictions": [],
+      "verdict": "pass"
+    },
+    "budget": {
+      "iterations": 1,
+      "tool_calls": 0,
+      "llm_calls": 0,
+      "tokens_used": 0,
+      "cost_usd": 0.0,
+      "breach": null
+    },
+    "errors": [],
+    "diagnostics": {
+      "agreements": {
+        "strategy": "hybrid_rerank",
+        "classifier_verdict": null,
+        "skipped": [],
+        "dense_ids": [
+          "AGR-002",
+          "AGR-002",
+          "AGR-002",
+          "AGR-002"
+        ],
+        "bm25_ids": [
+          "AGR-002",
+          "AGR-002",
+          "AGR-002",
+          "AGR-002"
+        ],
+        "fused_ids": [
+          "AGR-002",
+          "AGR-002",
+          "AGR-002",
+          "AGR-002"
+        ],
+        "reranked_ids": [
+          "AGR-002",
+          "AGR-002",
+          "AGR-002",
+          "AGR-002"
+        ],
+        "counts": {
+          "dense": 4,
+          "bm25": 4,
+          "fused": 4,
+          "stale": 0,
+          "parent_expanded": 0
+        }
+      }
+    }
+  }
+}
