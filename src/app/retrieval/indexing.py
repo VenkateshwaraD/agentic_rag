@@ -1,4 +1,7 @@
-"""Indexing pipeline: load → chunk → redact → embed → write to both stores."""
+"""Indexing pipeline: load → chunk → redact → embed → write to both stores.
+
+Author: venkateshwara doijode
+"""
 
 from pathlib import Path
 
@@ -29,6 +32,7 @@ def _collection_dirs(settings) -> list[tuple[Path, str]]:
 
 
 def gather_chunks() -> dict[str, list[Chunk]]:
+    """Load, chunk, and PII-redact every corpus doc, grouped by collection."""
     settings = get_settings()
     by_collection: dict[str, list[Chunk]] = {}
     for root, coll in _collection_dirs(settings):
@@ -41,6 +45,12 @@ def gather_chunks() -> dict[str, list[Chunk]]:
 
 
 def run_index(rebuild: bool = False) -> dict[str, int]:
+    """Run the full indexing pipeline and return per-collection chunk counts.
+
+    Ensures the pgvector schema (probing the embed dimension), optionally
+    clears both stores when ``rebuild`` is set, then embeds and writes all
+    gathered chunks to pgvector and OpenSearch.
+    """
     embedder = get_embedder()
     vectors = get_vectorstore()
     lexical = get_opensearch()
@@ -55,7 +65,7 @@ def run_index(rebuild: bool = False) -> dict[str, int]:
     for coll, chunks in gather_chunks().items():
         lexical.ensure_index(coll)
         embeddings = embedder.embed_documents([c.text for c in chunks])
-        counts[coll] = vectors.upsert(chunks, embeddings) + 0
+        counts[coll] = vectors.upsert(chunks, embeddings)
         lexical.bulk_index(coll, chunks)
         log.info("index.collection_done", collection=coll, chunks=len(chunks))
     return counts

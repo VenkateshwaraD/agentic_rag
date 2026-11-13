@@ -1,5 +1,8 @@
 """Retrieve node — runs the hybrid pipeline per routed collection and the
-routed ops tools (read-only, entitlement-scoped). Every call is audited."""
+routed ops tools (read-only, entitlement-scoped). Every call is audited.
+
+Author: venkateshwara doijode
+"""
 
 from app.agent.nodes.common import Timer, audit
 from app.core.constants import EV_RETRIEVAL, EV_TOOL_CALL
@@ -35,6 +38,13 @@ def _run_ops_tool(tool: str, principal, client_id: str | None, extra: dict) -> d
 
 
 def retrieve(state):
+    """Gather evidence for the question.
+
+    Resolves the caller's ACL, adds implicit tickets/trades tool calls when
+    record ids appear in the question, runs hybrid search over each routed
+    collection, executes each routed ops tool, audits both stages, and
+    returns retrieved chunks, per-collection diagnostics, and tool rows.
+    """
     principal = state["principal"]
     acl = acl_for(principal)
     extra = state.get("extra", {})

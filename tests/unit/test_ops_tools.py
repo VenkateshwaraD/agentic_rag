@@ -1,11 +1,15 @@
 """SQL tool arg binding — verifies parameterized clauses, no string concat
-of user input into SQL."""
+of user input into SQL.
+
+Author: venkateshwara doijode
+"""
 
 from app.security.authn import Principal
 from app.tools.ops.client import client_clause
 
 
 def test_client_clause_placeholders():
+    """Verify the entitlement clause uses bound params, never inlined values."""
     p = Principal("u1", "agent", ("acme", "bluepeak"))
     clause, params = client_clause(p)
     assert "client_id IN (:ent_c0, :ent_c1)" in clause
@@ -15,6 +19,7 @@ def test_client_clause_placeholders():
 
 
 def test_client_clause_empty():
+    """Verify a principal with no entitled clients gets a FALSE clause (deny all)."""
     p = Principal("u1", "agent", ())
     clause, params = client_clause(p)
     assert clause == "FALSE"

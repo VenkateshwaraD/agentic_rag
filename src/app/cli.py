@@ -1,4 +1,7 @@
-"""copilot CLI — corpus / db / index / ask / evalset / eval subcommands."""
+"""copilot CLI — corpus / db / index / ask / evalset / eval subcommands.
+
+Author: venkateshwara doijode
+"""
 
 import csv
 import uuid
@@ -26,7 +29,11 @@ log = get_logger(__name__)
 
 @corpus_app.command("generate")
 def corpus_generate():
-    """Generate the deterministic synthetic corpus + ops seed + facts."""
+    """Generate the deterministic synthetic corpus + ops seed + facts.
+
+    Writes agreement/SLA/team markdown, ops CSVs, facts.json, and users.json,
+    then echoes a summary count of what was produced.
+    """
     configure_logging()
     from app.data.corpus.generate import generate
 
@@ -39,7 +46,12 @@ def corpus_generate():
 
 @db_app.command("init")
 def db_init():
-    """Create ops tables + readonly role, seed ops CSVs, create audit table."""
+    """Create ops tables + readonly role, seed ops CSVs, create audit table.
+
+    Applies the seed SQL scripts against the ops admin connection, loads the
+    generated CSVs into the ops tables (fails if the corpus wasn't generated
+    first), and ensures the audit table exists in the rag database.
+    """
     configure_logging()
     s = get_settings()
     seed = PROJECT_ROOT / "db" / "seed"
@@ -73,7 +85,10 @@ def db_init():
 
 @app.command("index")
 def index(rebuild: bool = typer.Option(False, "--rebuild")):
-    """Chunk → redact → embed → write both stores."""
+    """Chunk → redact → embed → write both stores.
+
+    Pass ``--rebuild`` to wipe pgvector and the OpenSearch indexes first.
+    """
     configure_logging()
     from app.retrieval.indexing import run_index
 
@@ -83,7 +98,11 @@ def index(rebuild: bool = typer.Option(False, "--rebuild")):
 
 @app.command("ask")
 def ask(question: str, user: str = typer.Option("u_agent1", "--user")):
-    """Ask the copilot a question as a given user (entitlement demo)."""
+    """Ask the copilot a question as a given user (entitlement demo).
+
+    Looks up the fixture user's API key, authenticates, runs the agent graph,
+    and prints the reply, citations, tool calls, refusal flag, and trace id.
+    """
     configure_logging()
     import json as _json
 
@@ -103,7 +122,10 @@ def ask(question: str, user: str = typer.Option("u_agent1", "--user")):
 
 @evalset_app.command("generate")
 def evalset_generate(output: Path | None = None):
-    """Bootstrap golden-set questions from facts.json (review before golden)."""
+    """Bootstrap golden-set questions from facts.json (review before golden).
+
+    Writes a JSONL eval set to ``--output`` or ``eval/golden_set.jsonl``.
+    """
     configure_logging()
     import sys
 
@@ -120,7 +142,11 @@ def eval_run(
     limit: int = typer.Option(0, "--limit"),
     golden: Path | None = None,
 ):
-    """Run the copilot over the golden set and write a report."""
+    """Run the copilot over the golden set and write a report.
+
+    ``--limit`` caps the number of questions evaluated; ``--golden`` selects
+    an alternate JSONL file. Prints the generated report path.
+    """
     configure_logging()
     import sys
 

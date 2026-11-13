@@ -1,4 +1,7 @@
-"""Eval runner — executes the copilot over the golden set and scores it."""
+"""Eval runner — executes the copilot over the golden set and scores it.
+
+Author: venkateshwara doijode
+"""
 
 import json
 import sys
@@ -14,10 +17,17 @@ from report import write_report  # noqa: E402
 
 
 def _load_rows(path: Path) -> list[dict]:
+    """Parse the golden-set JSONL file into a list of question rows."""
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
 def run_eval(golden_path: Path, limit: int | None = None) -> Path:
+    """Run every golden question through the agent graph and score the outputs.
+
+    Authenticates each row's fixture user, collects deterministic metrics
+    plus Ragas samples, aggregates results, writes a dated report, and
+    returns the report path.
+    """
     from app.agent.graph import answer
     from app.core.config import get_settings
     from app.core.logging import configure_logging, get_logger

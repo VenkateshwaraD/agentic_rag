@@ -1,4 +1,7 @@
-"""Agent state passed through the LangGraph."""
+"""Agent state passed through the LangGraph.
+
+Author: venkateshwara doijode
+"""
 
 from typing import Any, TypedDict
 
@@ -6,6 +9,13 @@ from app.security.authn import Principal
 
 
 class AgentState(TypedDict, total=False):
+    """Typed dict of the state threaded through every node of the agent graph.
+
+    Groups: inputs (question, principal, ids), routing decisions (sources,
+    ops calls, rewrite/grade flags), retrieval results (chunks, diagnostics,
+    tool rows), and outputs (draft/reply, citations, refusal metadata).
+    """
+
     # inputs
     question: str
     principal: Principal

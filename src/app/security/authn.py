@@ -3,6 +3,8 @@
 Users and entitlements are loaded from a JSON fixture (db/seed/users.json).
 Production path: replace with OIDC/JWT introspection — the Principal
 interface and authz filters stay identical.
+
+Author: venkateshwara doijode
 """
 
 import json
@@ -16,21 +18,30 @@ from app.core.errors import UnauthorizedError
 
 @dataclass(frozen=True)
 class Principal:
+    """Authenticated caller identity: user id, role, and entitled client ids."""
+
     user_id: str
     role: str
     client_ids: tuple[str, ...]
 
     @property
     def is_admin(self) -> bool:
+        """Return True when the principal has the ``admin`` role."""
         return self.role == "admin"
 
 
 @lru_cache
 def _load_users(path: str) -> dict[str, dict]:
+    """Load and cache the users fixture file, keyed by ``user_id``."""
     return {u["user_id"]: u for u in json.loads(Path(path).read_text())}
 
 
 def authenticate(api_key: str | None, user_id: str | None) -> Principal:
+    """Validate API key + user id headers and return the caller's ``Principal``.
+
+    Raises ``UnauthorizedError`` for a missing/invalid key, missing user id,
+    unknown user, or a key that doesn't match the user record.
+    """
     settings = get_settings()
     if not api_key or api_key not in settings.valid_api_keys:
         raise UnauthorizedError("missing or invalid API key")

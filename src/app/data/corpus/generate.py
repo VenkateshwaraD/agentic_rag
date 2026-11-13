@@ -10,6 +10,8 @@ Generates the full prototype corpus in one seeded run:
   - users.json entitlements fixture
 
 Template-based (no LLM needed) so the corpus is fully reproducible.
+
+Author: venkateshwara doijode
 """
 
 import csv
@@ -73,6 +75,12 @@ INJECTION_STRINGS = [
 def _agreement_md(
     rng: random.Random, client_id: str, name: str, tier: str, ver: int
 ) -> tuple[str, dict]:
+    """Render one client's services-agreement markdown plus its facts record.
+
+    Randomizes fee schedule, statement frequency, owning team, and effective
+    date from the seeded RNG; returns the markdown body and the structured
+    ``facts`` dict used later as eval ground truth.
+    """
     wire_fee = round(rng.uniform(12, 35), 2)
     ach_fee = round(rng.uniform(0.10, 0.75), 2)
     monthly_fee = round(rng.uniform(150, 900), 2)
@@ -132,6 +140,11 @@ Service-related inquiries are handled by the {owner} team per §1.
 
 
 def _sla_md(rng: random.Random, n: int, scope: str) -> tuple[str, dict]:
+    """Render one SLA document (cutoffs, severity targets, escalation) + facts.
+
+    Randomizes same-day cutoffs per payment rail and SEV response/resolution
+    targets from the seeded RNG; returns the markdown body and facts dict.
+    """
     wire_cut = rng.choice(["15:00", "16:00", "17:00"]) + " ET"
     ach_cut = rng.choice(["18:00", "19:00", "20:00"]) + " ET"
     chk_cut = rng.choice(["14:00", "15:00"]) + " ET"
@@ -181,6 +194,7 @@ their Client Services Agreement.
 
 
 def _service_teams_md() -> str:
+    """Render the service-team directory document as a markdown table."""
     rows = "\n".join(f"| {t} | {cov} | {region} | {email} |" for t, cov, region, email in TEAMS)
     return f"""# Client Service Team Directory
 
@@ -199,6 +213,13 @@ regardless of assignment.
 
 
 def generate() -> dict:
+    """Generate the entire synthetic corpus deterministically (seed=42).
+
+    Writes agreement/SLA/service-team markdown, ops seed CSVs (accounts,
+    trades, tickets — with sprinkled PII and injection strings for security
+    evals), ``facts.json`` ground truth, and the ``users.json`` entitlements
+    fixture. Returns the facts dict.
+    """
     rng = random.Random(SEED)
     settings = get_settings()
     syn = settings.synthetic_dir

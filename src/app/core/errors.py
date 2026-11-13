@@ -1,4 +1,7 @@
-"""Application error types mapped to HTTP responses at the API layer."""
+"""Application error types mapped to HTTP responses at the API layer.
+
+Author: venkateshwara doijode
+"""
 
 
 class AppError(Exception):

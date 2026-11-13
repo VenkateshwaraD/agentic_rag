@@ -1,20 +1,20 @@
-"""Synthesize node — Claude drafts the cited reply (or emits a refusal)."""
+"""Synthesize node — Claude drafts the cited reply (or emits a refusal).
+
+Author: venkateshwara doijode
+"""
 
 import json
 import re
 
 from app.agent.llm import get_llm
 from app.agent.nodes.common import Timer, audit, load_prompt
-from app.core.constants import CITATION_PATTERN, EV_AGENT_STEP
+from app.core.constants import CITATION_PATTERN, EV_AGENT_STEP, REFUSAL_MESSAGE
 
-_REFUSAL = (
-    "I don't have enough entitled information to answer that question. "
-    "Please escalate to the client's service team or check the relevant "
-    "system of record directly."
-)
+_REFUSAL = REFUSAL_MESSAGE
 
 
 def _format_evidence(state) -> str:
+    """Render retrieved chunks and PII-redacted tool rows as a prompt evidence block."""
     from app.core.dependencies import get_pii_redactor
 
     redactor = get_pii_redactor()
@@ -30,6 +30,7 @@ def _format_evidence(state) -> str:
 
 
 def _extract_citations(draft: str) -> list[dict]:
+    """Parse ``[DOC-§section]`` markers from the draft into citation dicts."""
     return [
         {"doc_id": m.group(1), "section": m.group(2).strip()}
         for m in re.finditer(CITATION_PATTERN, draft)
@@ -50,6 +51,14 @@ def _offline_draft(state) -> str:
 
 
 def synthesize(state):
+    """Draft the final cited answer from the gathered evidence.
+
+    Short-circuits to the refusal message when upstream already refused.
+    Otherwise builds the evidence prompt, calls the LLM (or the offline
+    extractive fallback), extracts citations, enforces the
+    citation-required policy, audits the step, and returns the reply plus
+    citations — or a refusal when the draft lacks required citations.
+    """
     if state.get("refusal"):
         return {"reply": _REFUSAL, "citations": []}
 
@@ -93,4 +102,5 @@ def synthesize(state):
 
 
 def has_rows(state) -> bool:
+    """Return True when any ops tool call produced at least one row."""
     return any(tr["rows"] for tr in state.get("tool_results", []))

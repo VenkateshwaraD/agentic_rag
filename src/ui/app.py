@@ -1,6 +1,8 @@
 """Streamlit prototype UI — chat with citations + eval dashboard.
 
 Run: streamlit run src/ui/app.py
+
+Author: venkateshwara doijode
 """
 
 import json
@@ -17,10 +19,12 @@ REPORTS_DIR = Path(__file__).resolve().parents[2] / "eval" / "reports"
 
 @st.cache_data
 def _users():
+    """Load and cache the users fixture, keyed by ``user_id``."""
     return {u["user_id"]: u for u in json.loads(USERS_FILE.read_text())}
 
 
 def call_answer(question: str, user_id: str) -> dict:
+    """POST the question to ``/answer`` as the selected user; returns the response JSON."""
     user = _users()[user_id]
     resp = httpx.post(
         f"{API_URL}/answer",
@@ -33,6 +37,11 @@ def call_answer(question: str, user_id: str) -> dict:
 
 
 def chat_page():
+    """Render the chat page: user picker, history, and the question input.
+
+    Each turn renders the reply with a citations/diagnostics expander; new
+    questions call the API and are appended to session history.
+    """
     st.title("Client-Service Copilot")
     user_id = st.sidebar.selectbox("Acting as", list(_users()), index=0)
     user = _users()[user_id]
@@ -84,6 +93,7 @@ def chat_page():
 
 
 def eval_page():
+    """Render the eval dashboard: pick a report JSON and view summary/by-category/failures."""
     st.title("Eval Reports")
     reports = sorted(REPORTS_DIR.glob("*.json"), reverse=True)
     if not reports:

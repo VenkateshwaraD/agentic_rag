@@ -1,4 +1,7 @@
-"""GET /health (liveness) and /ready (dependency checks)."""
+"""GET /health (liveness) and /ready (dependency checks).
+
+Author: venkateshwara doijode
+"""
 
 import psycopg
 from fastapi import APIRouter
@@ -11,11 +14,17 @@ router = APIRouter()
 
 @router.get("/health")
 def health():
+    """Liveness probe — always returns ``{"status": "ok"}`` when the app is up."""
     return {"status": "ok"}
 
 
 @router.get("/ready")
 def ready():
+    """Readiness probe — checks Postgres and OpenSearch connectivity.
+
+    Returns ``ready`` when every dependency check passes, else ``degraded``
+    with the per-dependency results.
+    """
     s = get_settings()
     checks: dict[str, bool] = {}
     try:

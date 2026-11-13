@@ -1,17 +1,23 @@
-"""Output guardrail node — PII rescan of the draft + final refusal handling."""
+"""Output guardrail node — PII rescan of the draft + final refusal handling.
+
+Author: venkateshwara doijode
+"""
 
 from app.agent.nodes.common import Timer, audit
-from app.core.constants import EV_ANSWER, EV_GUARDRAIL, EV_REFUSAL
+from app.core.constants import EV_ANSWER, EV_GUARDRAIL, EV_REFUSAL, REFUSAL_MESSAGE
 from app.security.guardrails import check_output
 
-_REFUSAL = (
-    "I don't have enough entitled information to answer that question. "
-    "Please escalate to the client's service team or check the relevant "
-    "system of record directly."
-)
+_REFUSAL = REFUSAL_MESSAGE
 
 
 def guardrail_out(state):
+    """Apply the output guardrail and finalize the reply.
+
+    Rescans a non-refusal draft for PII/policy issues and swaps in the
+    refusal message when blocked; already-refused states skip the rescan.
+    Audits the guardrail decision plus the final answer/refusal event, and
+    returns the final reply, refusal flag, and appended guardrail log.
+    """
     reply = state.get("reply", _REFUSAL)
     refusal = state.get("refusal", False)
 

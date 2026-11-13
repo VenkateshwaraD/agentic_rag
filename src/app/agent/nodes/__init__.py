@@ -1,1 +1,4 @@
-"""Graph node functions."""
+"""Graph node functions.
+
+Author: venkateshwara doijode
+"""

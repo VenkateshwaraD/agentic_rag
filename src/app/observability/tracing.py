@@ -4,6 +4,8 @@ Langfuse v3+ SDK reads LANGFUSE_SECRET_KEY / LANGFUSE_HOST from env; we set
 them from Settings before constructing the handler. Falls back to the v2
 `langfuse.callback` path on older SDKs. The request's trace_id propagates
 to audit rows and the X-Trace-Id response header.
+
+Author: venkateshwara doijode
 """
 
 import os

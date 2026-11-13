@@ -5,6 +5,8 @@ SQL params for ops tools) so unauthorized documents never leave the store.
 Rule: a chunk is visible iff
     chunk.entitlements.roles ∋ user.role
 AND (chunk.entitlements.clients == "*" OR chunk.client_id ∈ user.client_ids)
+
+Author: venkateshwara doijode
 """
 
 from dataclasses import dataclass
@@ -15,6 +17,13 @@ from app.security.authn import Principal
 
 @dataclass(frozen=True)
 class ACLFilter:
+    """A principal's entitlements rendered into per-store filter clauses.
+
+    Produces the equivalent SQL ``WHERE`` fragment (pgvector), OpenSearch
+    bool filter, and an in-memory predicate so the same ACL rule is applied
+    identically in every store.
+    """
+
     client_ids: tuple[str, ...]
     role: str
 
@@ -31,7 +40,7 @@ class ACLFilter:
             placeholders = ", ".join(f":acl_c{i}" for i in range(len(self.client_ids)))
             client_clause = f"client_id IN ({placeholders})" if placeholders else "FALSE"
         sql = (
-            f"(entitlements->'clients' ? '\"*\"' OR {client_clause}) "
+            f"(entitlements->'clients' ? '*' OR {client_clause}) "
             "AND entitlements->'roles' ? :acl_role"
         )
         return sql, params
@@ -70,4 +79,5 @@ class ACLFilter:
 
 
 def acl_for(principal: Principal) -> ACLFilter:
+    """Build the ``ACLFilter`` for a principal's client ids and role."""
     return ACLFilter(client_ids=principal.client_ids, role=principal.role)

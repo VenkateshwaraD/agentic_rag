@@ -1,5 +1,8 @@
 """Route node — LLM classifies which sources/tools the inquiry needs,
-with a keyword heuristic fallback when no LLM key is configured."""
+with a keyword heuristic fallback when no LLM key is configured.
+
+Author: venkateshwara doijode
+"""
 
 import json
 import re
@@ -64,6 +67,11 @@ _OPS_KEYWORDS = {
 
 
 def _heuristic_route(question: str) -> dict:
+    """Classify sources/ops tools by keyword matching (offline fallback).
+
+    Also extracts a client id when a known client name appears in the
+    question. Defaults to all collections when no keyword matches.
+    """
     q = question.lower()
     sources = [c for c, kws in _KEYWORDS.items() if any(k in q for k in kws)]
     ops = [o for o, kws in _OPS_KEYWORDS.items() if any(k in q for k in kws)]
@@ -80,6 +88,13 @@ def _heuristic_route(question: str) -> dict:
 
 
 def route(state):
+    """Decide which collections and ops tools the question needs.
+
+    Uses the LLM router when an API key is configured, else the keyword
+    heuristic. Enforces client entitlements (refusing on a denied client),
+    extracts TKT-/TRD- record ids for point lookups, audits the decision,
+    and returns sources, ops calls, and routing extras — or a refusal.
+    """
     principal = state["principal"]
     with Timer() as t:
         decision = None
@@ -96,7 +111,7 @@ def route(state):
             decision = _heuristic_route(state["question"])
         # constrain to entitled clients — asking about a client the user
         # can't see refuses rather than answering with other clients' data
-        cid = decision.get("client_id")
+        cid = (decision.get("client_id") or "").lower() or None
         denied = bool(cid) and cid not in principal.client_ids
         if denied:
             cid = None

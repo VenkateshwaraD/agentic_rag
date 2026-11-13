@@ -1,4 +1,7 @@
-"""Report writer — dated JSON + Markdown under eval/reports/."""
+"""Report writer — dated JSON + Markdown under eval/reports/.
+
+Author: venkateshwara doijode
+"""
 
 import json
 from datetime import UTC, datetime
@@ -8,6 +11,11 @@ REPORTS_DIR = Path(__file__).resolve().parent / "reports"
 
 
 def write_report(result: dict) -> Path:
+    """Write the eval result as timestamped JSON + Markdown files.
+
+    The Markdown file contains summary, per-category, and failure tables.
+    Returns the JSON report path.
+    """
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     json_path = REPORTS_DIR / f"eval_{ts}.json"

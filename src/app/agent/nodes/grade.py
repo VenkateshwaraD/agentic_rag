@@ -3,6 +3,8 @@
 Heuristic first (non-empty, decent rerank score, or tool rows); if empty and
 not yet rewritten, rewrites the query once (adds client context) and the
 graph loops back through retrieve. Still empty → downstream refusal.
+
+Author: venkateshwara doijode
 """
 
 from app.agent.nodes.common import Timer, audit
@@ -12,6 +14,13 @@ _MIN_RERANK_SCORE = -2.0  # BGE logits; negative ~0 is a reasonable relevance ba
 
 
 def grade(state):
+    """Decide whether the retrieved evidence supports an answer.
+
+    Marks evidence sufficient when any doc beats the rerank-score bar or any
+    tool returned rows. Otherwise rewrites the question once with client
+    context (``retry``) or sets a refusal (``refuse``). Emits an audit event
+    and returns the state updates including ``grade_action``.
+    """
     retrieved = state.get("retrieved", [])
     tool_results = state.get("tool_results", [])
     has_rows = any(tr["rows"] for tr in tool_results)

@@ -1,1 +1,4 @@
-"""Agentic RAG client-service copilot."""
+"""Agentic RAG client-service copilot.
+
+Author: venkateshwara doijode
+"""

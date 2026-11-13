@@ -5,6 +5,8 @@ Defense-in-depth for read-only access:
   - session-level READ ONLY transaction mode + statement_timeout (session.py)
   - fixed parameterized query templates only — no free-text SQL path exists
   - hard row cap applied to every query
+
+Author: venkateshwara doijode
 """
 
 from typing import Any
@@ -33,4 +35,5 @@ def client_clause(principal: Principal, column: str = "client_id") -> tuple[str,
 
 
 def row_cap() -> int:
+    """Return the configured max rows an ops query may return."""
     return get_settings().ops_row_cap

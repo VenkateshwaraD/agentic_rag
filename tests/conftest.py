@@ -1,3 +1,8 @@
+"""Pytest config — puts ``src/`` on sys.path so ``app`` is importable.
+
+Author: venkateshwara doijode
+"""
+
 import sys
 from pathlib import Path
 

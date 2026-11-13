@@ -5,18 +5,22 @@ answer_relevancy, context_precision, context_recall, response_correctness.
 Custom checks (always run): citation P/R, per-stage retrieval recall,
 refusal accuracy, tool-selection correctness, ACL-leakage and
 must_not_contain (zero tolerance).
+
+Author: venkateshwara doijode
 """
 
 from collections import defaultdict
 
 
 def _recall(actual_ids: list, required: set) -> float:
+    """Fraction of required doc ids present among actual ids (1.0 when none required)."""
     if not required:
         return 1.0
     return len(set(actual_ids) & required) / len(required)
 
 
 def citation_metrics(output: dict, row: dict) -> dict:
+    """Citation precision/recall of the answer's cited doc ids vs. required ones."""
     cited = {c["doc_id"] for c in output.get("citations", [])}
     required = set(row.get("required_doc_ids", []))
     if not required:
@@ -27,6 +31,7 @@ def citation_metrics(output: dict, row: dict) -> dict:
 
 
 def retrieval_metrics(output: dict, row: dict) -> dict:
+    """Per-stage recall (dense / BM25 / fused / reranked) against required doc ids."""
     required = set(row.get("required_doc_ids", []))
     diag = output.get("diagnostics", {})
     out = {}
@@ -39,12 +44,14 @@ def retrieval_metrics(output: dict, row: dict) -> dict:
 
 
 def refusal_metric(output: dict, row: dict) -> float:
+    """1.0 when the refusal flag matches the row's ``must_refuse`` expectation."""
     if row.get("must_refuse"):
         return 1.0 if output.get("refusal") else 0.0
     return 1.0 if not output.get("refusal") else 0.0
 
 
 def tool_selection_metric(output: dict, row: dict) -> float:
+    """Fraction of required ops tools that were actually invoked."""
     required = set(row.get("required_tool_calls", []))
     if not required:
         return 1.0
@@ -64,6 +71,7 @@ def acl_leakage_metric(output: dict, row: dict, entitlements: dict) -> float:
 
 
 def must_not_contain_metric(output: dict, row: dict) -> float:
+    """0.0 when any banned substring appears in the reply, else 1.0."""
     banned = row.get("must_not_contain", [])
     if not banned:
         return 1.0

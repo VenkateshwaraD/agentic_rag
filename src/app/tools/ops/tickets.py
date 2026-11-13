@@ -2,6 +2,8 @@
 
 Ticket subjects may contain raw PII (deliberately, for evals) — replies pass
 through the output guardrail's PII rescan before reaching the user.
+
+Author: venkateshwara doijode
 """
 
 from app.security.authn import Principal
@@ -28,6 +30,11 @@ def search_tickets(
     category: str | None = None,
     keyword: str | None = None,
 ) -> list[dict]:
+    """Search tickets with optional client/status/category/keyword filters.
+
+    The entitlement clause is always ANDed in; extra filters narrow within
+    the entitled scope. Results are newest-first and row-capped.
+    """
     clause, params = client_clause(principal)
     filters = [clause]
     if client_id:

@@ -4,6 +4,8 @@ Flow: guardrail_in → route → retrieve → grade ─┐
         ↑ rewrite once ────────────────────────┘
         → (sufficient) → synthesize → guardrail_out → END
         → (insufficient after rewrite) → guardrail_out → END
+
+Author: venkateshwara doijode
 """
 
 from langgraph.graph import END, StateGraph
@@ -13,14 +15,17 @@ from app.agent.state import AgentState
 
 
 def _after_guardrail_in(state: AgentState) -> str:
+    """Route to the refusal path when the input guardrail blocked the question."""
     return "refuse" if state.get("refusal") else "route"
 
 
 def _after_grade(state: AgentState) -> str:
+    """Return the grade node's routing decision (answer / retry / refuse)."""
     return state.get("grade_action", "refuse")
 
 
 def build_graph():
+    """Wire the agent nodes and conditional edges into a compiled LangGraph."""
     g = StateGraph(AgentState)
     g.add_node("guardrail_in", guardrail_in.guardrail_in)
     g.add_node("route", route.route)
@@ -56,9 +61,16 @@ def build_graph():
 
 
 def answer(question: str, principal, request_id: str, trace_id: str = "") -> dict:
-    """Synchronous entry point used by API, CLI, and eval runner."""
+    """Synchronous entry point used by API, CLI, and eval runner.
+
+    Seeds the agent state, audits the query event, invokes the compiled
+    graph with tracing configured, and normalizes the result into the
+    response dict (reply, citations, retrieved docs, tool calls, refusal
+    flag, diagnostics, and trace/request ids).
+    """
     from app.agent.nodes.common import audit
     from app.core.constants import EV_QUERY
+    from app.core.dependencies import get_graph
     from app.observability.tracing import build_callback_handler, graph_config
 
     state: AgentState = {
@@ -70,7 +82,7 @@ def answer(question: str, principal, request_id: str, trace_id: str = "") -> dic
     audit(state, EV_QUERY, {"question": question})
     handler, _ = build_callback_handler()
     config = graph_config(handler, request_id, principal.user_id)
-    result = build_graph().invoke(state, config=config)
+    result = get_graph().invoke(state, config=config)
     return {
         "reply": result.get("reply", ""),
         "citations": result.get("citations", []),

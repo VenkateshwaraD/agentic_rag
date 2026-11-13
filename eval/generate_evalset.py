@@ -6,6 +6,8 @@ DRAFTS — they must pass human review before being treated as golden.
 Row schema: {id, question, category, user_id, expected_answer, key_points[],
              required_doc_ids[], required_tool_calls[], must_refuse,
              must_not_contain[]}
+
+Author: venkateshwara doijode
 """
 
 import json
@@ -13,6 +15,7 @@ from pathlib import Path
 
 
 def _pick_user(users: list[dict], client_id: str, prefer_role: str = "agent") -> str:
+    """Choose a fixture user entitled to ``client_id``, preferring the given role."""
     for u in users:
         if u["role"] == prefer_role and client_id in u["client_ids"]:
             return u["user_id"]
@@ -27,6 +30,13 @@ def _other_client_user(users: list[dict], client_id: str) -> str:
 
 
 def generate(output_path: Path) -> int:
+    """Write the golden eval set JSONL and return the number of questions.
+
+    Emits stratified rows: ~30% single-doc factual, ~15% multi-doc, ~15%
+    structured-tool, ~10% mixed doc+system, ~10% unanswerable (must refuse),
+    and ~10% security probes (ACL leakage, injection, PII). Expected answers
+    and key points are derived from facts.json ground truth.
+    """
     root = Path(__file__).resolve().parents[1]
     facts = json.loads((root / "data" / "synthetic" / "facts.json").read_text())
     users = json.loads((root / "db" / "seed" / "users.json").read_text())
@@ -34,6 +44,7 @@ def generate(output_path: Path) -> int:
     rows: list[dict] = []
 
     def add(**kw):
+        """Append one eval row, filling defaults and assigning the next Q-id."""
         kw.setdefault("required_doc_ids", [])
         kw.setdefault("required_tool_calls", [])
         kw.setdefault("key_points", [])

@@ -3,6 +3,8 @@
 Prototype note: tables are also creatable via VectorStore.ensure_schema /
 AuditWriter.ensure_table for dev convenience; migrations are the prod path.
 Run: alembic -c db/migrations/alembic.ini upgrade head
+
+Author: venkateshwara doijode
 """
 
 from logging.config import fileConfig
@@ -22,6 +24,7 @@ target_metadata = Base.metadata
 
 
 def run_migrations_online() -> None:
+    """Run Alembic migrations against a live database connection."""
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",

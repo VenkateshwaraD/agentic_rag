@@ -1,4 +1,7 @@
-"""Shared constants: collection names, event types, roles."""
+"""Shared constants: collection names, event types, roles.
+
+Author: venkateshwara doijode
+"""
 
 # Document collections (mirrored in pgvector + OpenSearch)
 COLLECTION_AGREEMENTS = "agreements"
@@ -22,3 +25,10 @@ EV_REFUSAL = "refusal"
 
 # Citation marker format used in prompts and parsed by the eval harness
 CITATION_PATTERN = r"\[([A-Z]{2,4}-\d{3})\s*§([^\]]+)\]"
+
+# User-facing refusal message (single source for synthesize + guardrail_out)
+REFUSAL_MESSAGE = (
+    "I don't have enough entitled information to answer that question. "
+    "Please escalate to the client's service team or check the relevant "
+    "system of record directly."
+)

@@ -1,4 +1,7 @@
-"""Shared helpers for graph nodes: audit logging + prompt loading."""
+"""Shared helpers for graph nodes: audit logging + prompt loading.
+
+Author: venkateshwara doijode
+"""
 
 import time
 from pathlib import Path
@@ -12,10 +15,12 @@ PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"
 
 
 def load_prompt(name: str) -> str:
+    """Read and return the prompt template file ``name`` from the prompts dir."""
     return (PROMPTS_DIR / name).read_text()
 
 
 def audit(state, event_type: str, payload: dict, latency_ms: float = 0.0) -> None:
+    """Write an audit event for the current request using ids and user from state."""
     get_audit().log_event(
         request_id=state.get("request_id", ""),
         trace_id=state.get("trace_id", ""),
@@ -27,10 +32,14 @@ def audit(state, event_type: str, payload: dict, latency_ms: float = 0.0) -> Non
 
 
 class Timer:
+    """Context manager that measures elapsed wall-clock time in ``self.ms``."""
+
     def __enter__(self):
+        """Record the start time and return the timer instance."""
         self.start = time.perf_counter()
         return self
 
     def __exit__(self, *exc):
+        """Compute elapsed milliseconds into ``self.ms``; never suppresses errors."""
         self.ms = (time.perf_counter() - self.start) * 1000
         return False

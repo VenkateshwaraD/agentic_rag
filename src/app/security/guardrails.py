@@ -1,4 +1,7 @@
-"""Guardrail checks used by the agent's input/output guardrail nodes."""
+"""Guardrail checks used by the agent's input/output guardrail nodes.
+
+Author: venkateshwara doijode
+"""
 
 import re
 from dataclasses import dataclass
@@ -17,6 +20,8 @@ MAX_QUESTION_LEN = 2000
 
 @dataclass(frozen=True)
 class GuardrailResult:
+    """Outcome of a guardrail check: whether content passed and why not."""
+
     allowed: bool
     reason: str = ""
 

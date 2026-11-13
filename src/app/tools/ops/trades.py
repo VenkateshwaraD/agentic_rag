@@ -1,4 +1,7 @@
-"""Trade system tool — parameterized, read-only, entitlement-scoped."""
+"""Trade system tool — parameterized, read-only, entitlement-scoped.
+
+Author: venkateshwara doijode
+"""
 
 from app.security.authn import Principal
 from app.tools.ops.client import client_clause, row_cap, run_query
@@ -12,6 +15,11 @@ def search_trades(
     start_date: str | None = None,
     end_date: str | None = None,
 ) -> list[dict]:
+    """Search trades with optional client/status/type/date-range filters.
+
+    The entitlement clause is always ANDed in; results are newest-first and
+    row-capped.
+    """
     clause, params = client_clause(principal)
     filters = [clause]
     if client_id:
@@ -40,6 +48,7 @@ def search_trades(
 
 
 def get_trade(trade_id: str, principal: Principal) -> list[dict]:
+    """Fetch one trade by id, but only when its client is in the principal's entitlements."""
     clause, params = client_clause(principal)
     params.update({"tid": trade_id, "cap": 1})
     sql = f"""

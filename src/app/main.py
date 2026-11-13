@@ -1,4 +1,7 @@
-"""FastAPI application factory."""
+"""FastAPI application factory.
+
+Author: venkateshwara doijode
+"""
 
 from contextlib import asynccontextmanager
 
@@ -21,6 +24,7 @@ _STATUS = {
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Startup: configure logging and ensure the audit table exists (best-effort)."""
     configure_logging()
     try:
         from app.core.dependencies import get_audit
@@ -37,6 +41,7 @@ app.add_middleware(RequestContextMiddleware)
 
 @app.exception_handler(AppError)
 async def app_error_handler(request, exc: AppError):
+    """Map application errors to their HTTP status and a ``{"detail": ...}`` body."""
     status = _STATUS.get(type(exc), 500)
     return JSONResponse(status_code=status, content={"detail": str(exc)})
 

@@ -1,4 +1,7 @@
-"""Application settings, loaded from environment / .env via pydantic-settings."""
+"""Application settings, loaded from environment / .env via pydantic-settings.
+
+Author: venkateshwara doijode
+"""
 
 from functools import lru_cache
 from pathlib import Path
@@ -9,6 +12,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
 class Settings(BaseSettings):
+    """Application settings populated from environment variables / .env.
+
+    Covers LLM and embedding providers, datastore URLs, auth fixtures,
+    Langfuse tracing, retrieval tuning, ops-tool limits, API bind address,
+    and filesystem paths for data/eval directories.
+    """
+
     model_config = SettingsConfigDict(
         env_file=PROJECT_ROOT / ".env", env_file_encoding="utf-8", extra="ignore"
     )
@@ -65,13 +75,16 @@ class Settings(BaseSettings):
 
     @property
     def valid_api_keys(self) -> set[str]:
+        """Parse the comma-separated ``api_keys`` value into a set of non-empty keys."""
         return {k.strip() for k in self.api_keys.split(",") if k.strip()}
 
     @property
     def langfuse_enabled(self) -> bool:
+        """Return True only when both Langfuse keys are set, enabling tracing."""
         return bool(self.langfuse_public_key and self.langfuse_secret_key)
 
 
 @lru_cache
 def get_settings() -> Settings:
+    """Build the ``Settings`` object once and return the cached singleton."""
     return Settings()

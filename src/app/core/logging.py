@@ -1,4 +1,7 @@
-"""Structured JSON logging via structlog with request/trace context."""
+"""Structured JSON logging via structlog with request/trace context.
+
+Author: venkateshwara doijode
+"""
 
 import logging
 import sys
@@ -7,6 +10,11 @@ import structlog
 
 
 def configure_logging(level: str = "INFO") -> None:
+    """Configure stdlib logging and structlog so all records are emitted as JSON.
+
+    Args:
+        level: Minimum log level name (e.g. ``"INFO"``, ``"DEBUG"``).
+    """
     logging.basicConfig(format="%(message)s", stream=sys.stdout, level=level)
     structlog.configure(
         processors=[
@@ -23,4 +31,5 @@ def configure_logging(level: str = "INFO") -> None:
 
 
 def get_logger(name: str) -> structlog.stdlib.BoundLogger:
+    """Return a structlog bound logger for the given module/component name."""
     return structlog.get_logger(name)

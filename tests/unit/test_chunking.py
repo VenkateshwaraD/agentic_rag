@@ -1,3 +1,8 @@
+"""Unit tests for document metadata parsing and section chunking.
+
+Author: venkateshwara doijode
+"""
+
 from pathlib import Path
 
 from app.data.ingest.chunking import (
@@ -18,6 +23,7 @@ Wire fee is $20.00.
 
 
 def test_parse_metadata_comment():
+    """Verify the HTML metadata comment is parsed into key/value fields."""
     meta = parse_metadata_comment(DOC)
     assert meta["doc_id"] == "AGR-001"
     assert meta["client_id"] == "acme"
@@ -25,6 +31,7 @@ def test_parse_metadata_comment():
 
 
 def test_chunk_document_metadata():
+    """Verify chunking produces per-section chunks with correct metadata/entitlements."""
     chunks = chunk_document(DOC, Path("AGR-001_acme.md"), "agreements")
     assert len(chunks) == 2
     c = chunks[0]
@@ -40,6 +47,7 @@ def test_chunk_document_metadata():
 
 
 def test_chunk_document_bank_wide():
+    """Verify docs without a client_id get wildcard (bank-wide) entitlements."""
     doc = "<!-- doc_id: SLA-001 -->\n\n## §1 Cutoffs\nWire cutoff is 16:00 ET."
     chunks = chunk_document(doc, Path("SLA-001_x.md"), "slas")
     assert chunks[0].entitlements["clients"] == "*"

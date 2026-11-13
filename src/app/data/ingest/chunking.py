@@ -2,6 +2,8 @@
 
 Metadata per chunk: {doc_id, source, date, owner, entitlements, doc_version, section}
 entitlements = {"clients": [client_id, ...] | "*", "roles": [role, ...]}
+
+Author: venkateshwara doijode
 """
 
 import re
@@ -19,6 +21,12 @@ _SECTION_RE = re.compile(r"^(#{1,3})\s+(§?\S*.*)$", re.MULTILINE)
 
 @dataclass
 class Chunk:
+    """One indexed unit of a document: a section of text plus its metadata.
+
+    Carries provenance (doc_id, source, date, owner, version, section,
+    client) and the entitlement record used for ACL filtering at query time.
+    """
+
     doc_id: str
     source: str
     date: str
@@ -31,6 +39,10 @@ class Chunk:
 
 
 def parse_metadata_comment(text: str) -> dict[str, str]:
+    """Extract the ``<!-- doc_id: X | key: value ... -->`` header into a dict.
+
+    Returns an empty dict when the document has no metadata comment.
+    """
     m = _META_RE.search(text)
     if not m:
         return {}
@@ -65,6 +77,12 @@ def _build_entitlements(client_id: str, source: str) -> dict:
 
 
 def chunk_document(text: str, path: Path, source: str) -> list[Chunk]:
+    """Split one document's text into ``Chunk`` records, one per section.
+
+    Metadata comes from the HTML comment header (falling back to the file
+    stem for doc_id); each non-empty markdown section becomes a chunk with
+    entitlements derived from the doc's client scope.
+    """
     meta = parse_metadata_comment(text)
     doc_id = meta.get("doc_id", path.stem)
     client_id = meta.get("client_id", "")
@@ -93,6 +111,7 @@ def chunk_document(text: str, path: Path, source: str) -> list[Chunk]:
 
 
 def chunk_directory(root: Path, source: str, loaders_iter) -> list[Chunk]:
+    """Load and chunk every supported document under ``root`` for a collection."""
     from app.data.ingest.loaders import load_document
 
     chunks: list[Chunk] = []

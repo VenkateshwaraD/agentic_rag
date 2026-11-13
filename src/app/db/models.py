@@ -1,14 +1,19 @@
-"""SQLAlchemy models for the rag database (ragdb)."""
+"""SQLAlchemy models for the rag database (ragdb).
+
+Author: venkateshwara doijode
+"""
 
 from sqlalchemy import JSON, Column, DateTime, Float, Integer, String, Text, func
 from sqlalchemy.orm import DeclarativeBase
 
 
 class Base(DeclarativeBase):
-    pass
+    """Declarative base shared by all ragdb ORM models."""
 
 
 class ChunkRow(Base):
+    """Row of the ``chunks`` table — one indexed document section + metadata."""
+
     __tablename__ = "chunks"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -25,6 +30,8 @@ class ChunkRow(Base):
 
 
 class AuditEvent(Base):
+    """Row of the ``audit_events`` table — one compliance event per graph stage."""
+
     __tablename__ = "audit_events"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -38,6 +45,8 @@ class AuditEvent(Base):
 
 
 class UserEntitlement(Base):
+    """Row of the ``entitlements`` table — a user's role and client-id scope."""
+
     __tablename__ = "entitlements"
 
     id = Column(Integer, primary_key=True, autoincrement=True)

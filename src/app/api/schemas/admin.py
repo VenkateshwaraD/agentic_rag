@@ -1,15 +1,12 @@
+"""Pydantic schemas for the admin endpoints (reindex, audit lookup).
+
+Author: venkateshwara doijode
+"""
+
 from pydantic import BaseModel
 
 
 class ReindexResponse(BaseModel):
+    """Response body for ``POST /admin/reindex`` — per-collection doc counts."""
+
     collections: dict[str, int]
-
-
-class AuditEventOut(BaseModel):
-    request_id: str
-    trace_id: str
-    user_id: str
-    ts: str
-    event_type: str
-    payload: dict
-    latency_ms: float

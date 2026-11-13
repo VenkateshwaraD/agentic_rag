@@ -1,5 +1,8 @@
 """OpenSearch BM25 lexical store — one index per collection, ACL term
-filters applied as query-time filter clauses (pre-filter, not post)."""
+filters applied as query-time filter clauses (pre-filter, not post).
+
+Author: venkateshwara doijode
+"""
 
 from typing import Any
 
@@ -31,25 +34,32 @@ _MAPPINGS = {
 
 
 class LexicalStore:
+    """OpenSearch-backed BM25 store with per-collection indexes and ACL filters."""
+
     def __init__(self, settings: Settings):
+        """Create the OpenSearch client from the configured URL."""
         self._client = OpenSearch(hosts=[settings.opensearch_url], timeout=30, max_retries=2)
 
     @staticmethod
     def index_name(collection: str) -> str:
+        """Map a collection name to its OpenSearch index name."""
         return f"rag_{collection}"
 
     def ensure_index(self, collection: str) -> None:
+        """Create the collection's index with the field mappings if missing."""
         name = self.index_name(collection)
         if not self._client.indices.exists(index=name):
             self._client.indices.create(index=name, body=_MAPPINGS)
             log.info("lexical.index_created", index=name)
 
     def clear(self, collection: str) -> None:
+        """Delete the collection's index entirely (used on rebuild)."""
         name = self.index_name(collection)
         if self._client.indices.exists(index=name):
             self._client.indices.delete(index=name)
 
     def bulk_index(self, collection: str, chunks: list[Chunk]) -> int:
+        """Bulk-index chunks into the collection; returns the count indexed."""
         name = self.index_name(collection)
         actions = [
             {
@@ -81,6 +91,11 @@ class LexicalStore:
         top_k: int,
         focus_client: str | None = None,
     ) -> list[dict[str, Any]]:
+        """Run an ACL-filtered BM25 match query and return the top-k hits.
+
+        The entitlement bool filter is applied as a query-time filter clause
+        so unauthorized documents are excluded before scoring.
+        """
         body = {
             "size": top_k,
             "query": {

@@ -1,6 +1,9 @@
 """Document loaders for synthetic and real corpora.
 
-Supported: .md, .txt, .csv, .pdf, .docx. Each loader returns (text, doc_id_hint).
+Supported: .md, .txt, .csv, .pdf, .docx. Each loader returns the document's
+text content.
+
+Author: venkateshwara doijode
 """
 
 import csv
@@ -15,6 +18,10 @@ SUPPORTED = {".md", ".txt", ".csv", ".pdf", ".docx"}
 
 
 def load_document(path: Path) -> str:
+    """Dispatch to the per-extension loader and return the document's text.
+
+    Raises ``AppError`` for unsupported file types.
+    """
     ext = path.suffix.lower()
     if ext in (".md", ".txt"):
         return path.read_text(encoding="utf-8")
@@ -28,6 +35,7 @@ def load_document(path: Path) -> str:
 
 
 def _load_csv(path: Path) -> str:
+    """Flatten a CSV into one ``key: value;`` line per row for indexing."""
     rows = []
     with open(path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
@@ -37,6 +45,7 @@ def _load_csv(path: Path) -> str:
 
 
 def _load_pdf(path: Path) -> str:
+    """Extract and join text from every page of a PDF via pypdf."""
     from pypdf import PdfReader
 
     reader = PdfReader(str(path))
@@ -44,6 +53,7 @@ def _load_pdf(path: Path) -> str:
 
 
 def _load_docx(path: Path) -> str:
+    """Join the paragraph texts of a .docx file via python-docx."""
     import docx
 
     doc = docx.Document(str(path))

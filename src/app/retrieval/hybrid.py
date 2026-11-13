@@ -2,6 +2,8 @@
 
 Returns top-m results plus per-stage diagnostics (used by the eval harness
 to measure dense-only / BM25-only / fused / reranked recall separately).
+
+Author: venkateshwara doijode
 """
 
 from collections import defaultdict
@@ -34,6 +36,8 @@ def rrf_fuse(rankings: list[list[dict]], k: int = 60) -> list[dict]:
 
 
 class HybridRetriever:
+    """Runs dense + lexical search, fuses via RRF, and reranks the candidates."""
+
     def __init__(
         self,
         embedder: Embeddings,
@@ -42,6 +46,7 @@ class HybridRetriever:
         reranker: Reranker,
         settings: Settings,
     ):
+        """Store the pipeline components and retrieval tuning settings."""
         self._embedder = embedder
         self._vectors = vectors
         self._lexical = lexical
@@ -55,6 +60,12 @@ class HybridRetriever:
         acl: ACLFilter,
         focus_client: str | None = None,
     ) -> dict[str, Any]:
+        """Execute the full hybrid pipeline for one query in one collection.
+
+        Embeds the query, runs ACL-filtered dense and BM25 searches, fuses
+        them with RRF, reranks the top candidates, and returns the final
+        top-k results plus per-stage diagnostics.
+        """
         qvec = self._embedder.embed_query(query)
         dense = self._vectors.search(qvec, collection, acl, self._s.dense_top_k, focus_client)
         bm25 = self._lexical.search(query, collection, acl, self._s.lexical_top_k, focus_client)

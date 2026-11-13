@@ -5,6 +5,8 @@ Payloads are PII-redacted before insert. Writes are synchronous (audit must
 not silently drop); callers treat failures as logged warnings so an audit
 outage degrades observability without taking the copilot down — flagged in
 runbooks for production hardening (outbox pattern).
+
+Author: venkateshwara doijode
 """
 
 from typing import Any
@@ -53,10 +55,14 @@ def _redact_payload(value: Any) -> Any:
 
 
 class AuditWriter:
+    """Writes PII-redacted audit events to the ``audit_events`` table."""
+
     def __init__(self, settings: Settings):
+        """Store the settings used to locate the rag database."""
         self._settings = settings
 
     def ensure_table(self) -> None:
+        """Create the audit table and its indexes if they don't already exist."""
         with rag_engine().begin() as conn:
             for stmt in _DDL.split(";"):
                 if stmt.strip():
@@ -71,6 +77,7 @@ class AuditWriter:
         payload: dict,
         latency_ms: float = 0.0,
     ) -> None:
+        """Insert one PII-redacted audit row; logs a warning instead of raising on failure."""
         import json as _json
 
         try:
@@ -90,6 +97,7 @@ class AuditWriter:
             log.warning("audit.write_failed", event_type=event_type, error=str(exc))
 
     def events_for_request(self, request_id: str) -> list[dict]:
+        """Return every audit event for ``request_id``, ordered by insertion."""
         with rag_engine().begin() as conn:
             rows = conn.execute(
                 text(

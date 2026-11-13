@@ -1,5 +1,8 @@
 """pgvector dense store — one `chunks` table, HNSW index, ACL pre-filters
-applied in the WHERE clause so unauthorized docs never leave the store."""
+applied in the WHERE clause so unauthorized docs never leave the store.
+
+Author: venkateshwara doijode
+"""
 
 import json
 import re
@@ -17,19 +20,24 @@ log = get_logger(__name__)
 
 
 class VectorStore:
+    """pgvector-backed dense store over the ``chunks`` table with ACL pre-filters."""
+
     def __init__(self, settings: Settings):
+        """Store the rag database URL for later connections."""
         self._url = settings.database_url
 
-    def _connect(self, dim: int | None = None) -> psycopg.Connection:
+    def _connect(self) -> psycopg.Connection:
+        """Open a connection, ensure the vector extension, and register the codec."""
         conn = psycopg.connect(self._url, autocommit=False)
         conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
         register_vector(conn)
         return conn
 
     def ensure_schema(self, dim: int) -> None:
-        with self._connect(dim) as conn, conn.cursor() as cur:
+        """Create the chunks table (with ``vector(dim)`` column) and its indexes."""
+        with self._connect() as conn, conn.cursor() as cur:
             cur.execute(
-                """
+                f"""
                 CREATE TABLE IF NOT EXISTS chunks (
                     id            SERIAL PRIMARY KEY,
                     doc_id        TEXT NOT NULL,
@@ -39,7 +47,7 @@ class VectorStore:
                     owner         TEXT DEFAULT '',
                     doc_version   TEXT DEFAULT '1.0',
                     section       TEXT DEFAULT '',
-                    entitlements  JSONB NOT NULL DEFAULT '{}',
+                    entitlements  JSONB NOT NULL DEFAULT '{{}}',
                     text          TEXT NOT NULL,
                     embedding     vector({dim})
                 )"""
@@ -55,10 +63,12 @@ class VectorStore:
         log.info("vectorstore.schema_ready", dim=dim)
 
     def clear(self) -> None:
+        """Truncate the chunks table (used on full rebuild)."""
         with self._connect() as conn, conn.cursor() as cur:
             cur.execute("TRUNCATE chunks")
 
     def upsert(self, chunks: list[Chunk], embeddings: list[list[float]]) -> int:
+        """Bulk-insert chunks with their embedding vectors; returns rows inserted."""
         import numpy as np
 
         rows = [
@@ -94,6 +104,11 @@ class VectorStore:
         top_k: int,
         focus_client: str | None = None,
     ) -> list[dict[str, Any]]:
+        """Cosine-similarity search over one collection with the ACL WHERE clause.
+
+        Translates named params to positional for psycopg and returns the
+        top-k rows as dicts including the similarity score.
+        """
         where, params = acl.pg_where(focus_client)
         params["src"] = source
         params["k"] = top_k

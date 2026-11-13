@@ -1,5 +1,8 @@
 """Local cross-encoder reranker (BGE-reranker via sentence-transformers).
-Lazy singleton — model loads on first use."""
+Lazy singleton — model loads on first use.
+
+Author: venkateshwara doijode
+"""
 
 from app.core.logging import get_logger
 
@@ -7,12 +10,16 @@ log = get_logger(__name__)
 
 
 class Reranker:
+    """Cross-encoder reranker that lazily loads its model on first use."""
+
     def __init__(self, model_name: str):
+        """Record the model name; the CrossEncoder is loaded lazily."""
         self._model_name = model_name
         self._model = None  # lazy: sentence_transformers loads on first use
 
     @property
     def model(self):
+        """Load and return the CrossEncoder model (once, then cached)."""
         if self._model is None:
             from sentence_transformers import CrossEncoder
 
