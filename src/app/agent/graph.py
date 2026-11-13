@@ -13,7 +13,7 @@ guardrail_out so loops can never run indefinitely.
 Author: venkateshwara doijode
 """
 
-from typing import cast
+from typing import Any, cast
 
 from langgraph.graph import END, StateGraph
 
@@ -239,17 +239,61 @@ def stream_answer(
     }
 
 
-def _safe_delta(delta) -> dict:
-    """Return a JSON-safe summary of a node update (no principals/objects)."""
-    import json
+# identifier fields — system-generated ids never carry PII, and Presidio
+# false-positives on them (e.g. "AGR-002" -> <PERSON>) would break the
+# doc_id/chunk_id linkage stream consumers rely on
+_IDENT_KEYS = frozenset(
+    {
+        "doc_id",
+        "chunk_id",
+        "parent_id",
+        "client_id",
+        "source",
+        "collection",
+        "doc_version",
+        "doc_type",
+        "tool",
+        "ticket_id",
+        "trade_id",
+        "account_id",
+        "content_hash",
+        "section",
+    }
+)
 
-    out = {}
-    for k, v in (delta or {}).items():
-        if k == "principal":
-            continue
-        try:
-            json.dumps(v, default=str)
-            out[k] = v
-        except (TypeError, ValueError):
-            out[k] = str(v)[:500]
-    return out
+
+def _redact_leaf(value, redactor) -> Any:
+    """Recursively PII-redact string leaves, preserving structure.
+
+    Redacting after ``json.dumps`` corrupts the payload when a match spans
+    an escaped character — leaf-level redaction cannot break structure.
+    """
+    from enum import Enum
+
+    if isinstance(value, Enum):
+        # str-Enum subclasses fail spaCy's exact-type check — unwrap first
+        return _redact_leaf(value.value, redactor)
+    if isinstance(value, str):
+        return redactor.redact(value)
+    if isinstance(value, dict):
+        return {k: v if k in _IDENT_KEYS else _redact_leaf(v, redactor) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [_redact_leaf(v, redactor) for v in value]
+    if value is None or isinstance(value, int | float | bool):
+        return value
+    return str(value)[:500]
+
+
+def _safe_delta(delta) -> dict:
+    """Return a JSON-safe, PII-redacted summary of a node update.
+
+    Drops ``principal`` and redacts PII from every string value —
+    ``tool_results`` carries raw ops rows (ticket subjects/resolutions
+    contain names/emails/phones) and SSE streams deltas before
+    ``guardrail_out`` can rescan them, so this is the only redaction point
+    on the streaming path.
+    """
+    from app.core.dependencies import get_pii_redactor
+
+    redactor = get_pii_redactor()
+    return {k: _redact_leaf(v, redactor) for k, v in (delta or {}).items() if k != "principal"}

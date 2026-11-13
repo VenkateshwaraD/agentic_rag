@@ -17,6 +17,7 @@ Author: venkateshwara doijode
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from functools import lru_cache
 
 from app.core.logging import get_logger
 
@@ -188,8 +189,13 @@ class RegexRedactor(PIIRedactor):
         return any(p.search(text) for p, _ in self.REDACT_PATTERNS)
 
 
+@lru_cache(maxsize=1)
 def build_redactor() -> PIIRedactor:
-    """Construct the best available redactor: Presidio if usable, else regex fallback."""
+    """Construct the best available redactor: Presidio if usable, else regex fallback.
+
+    Cached — engine construction loads ~30 recognizers and takes seconds;
+    callers (audit payloads, prompt redaction, SSE deltas) share one engine.
+    """
     try:
         r = PresidioRedactor()
         r.contains_pii("warmup test@example.com")  # smoke: spaCy model load check
