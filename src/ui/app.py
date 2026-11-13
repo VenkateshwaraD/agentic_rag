@@ -99,7 +99,11 @@ def eval_page():
     if not reports:
         st.info("No reports yet — run `copilot eval run`.")
         return
-    chosen = st.selectbox("Report", [r.name for r in reports])
+    names = [r.name for r in reports]
+    qp_report = st.query_params.get("report", "")
+    eval_names = [n for n in names if n.startswith("eval_")]
+    default = qp_report if qp_report in names else (eval_names[0] if eval_names else names[0])
+    chosen = st.selectbox("Report", names, index=names.index(default))
     data = json.loads((REPORTS_DIR / chosen).read_text())
     st.subheader("Summary")
     st.json(data.get("summary", {}))
@@ -111,5 +115,9 @@ def eval_page():
         st.dataframe(data["failures"])
 
 
-page = st.sidebar.radio("Page", ["Chat", "Eval dashboard"])
+_PAGES = {"chat": "Chat", "eval": "Eval dashboard"}
+_default_page = _PAGES.get(st.query_params.get("page", ""), "Chat")
+page = st.sidebar.radio(
+    "Page", list(_PAGES.values()), index=list(_PAGES.values()).index(_default_page)
+)
 chat_page() if page == "Chat" else eval_page()

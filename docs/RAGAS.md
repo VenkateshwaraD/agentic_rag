@@ -368,3 +368,11 @@ per-category breakdown, then the `failures` list — every row that missed
 any metric with its reply text and which scores fell short.
 
 ![eval report](screenshots/eval_report.png)
+
+**A.5 — The Streamlit eval dashboard.** The same report viewed in the UI
+(`Page → Eval dashboard`, or deep-link `http://127.0.0.1:8501/?page=eval`;
+a specific file via `?page=eval&report=<name>`). The picker defaults to the
+newest `eval_*.json`; summary, per-category table, and failures table
+render the raw report JSON from §6.
+
+![eval dashboard](screenshots/eval_dashboard.png)
