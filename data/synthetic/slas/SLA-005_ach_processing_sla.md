@@ -1,6 +1,6 @@
 # Service Level Agreement — ACH Processing SLA
 
-<!-- doc_id: SLA-005 | scope: ach_processing_sla -->
+<!-- doc_id: SLA-005 | scope: ach_processing_sla | doc_type: sla -->
 
 ## §1 Processing Cutoffs
 Transactions received before the cutoff are processed same business day; items

@@ -8,7 +8,7 @@ raw dicts or raised exceptions.
 Author: venkateshwara doijode
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -77,7 +77,7 @@ class TradeRow(BaseModel):
     status: str
     amount: float
     currency: str
-    trade_date: str
+    trade_date: date
 
 
 class TicketRow(BaseModel):
@@ -89,7 +89,7 @@ class TicketRow(BaseModel):
     status: str
     subject: str
     resolution: str
-    created_at: str
+    created_at: datetime
 
 
 OpsErrorCode = Literal[

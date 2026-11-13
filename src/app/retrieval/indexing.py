@@ -105,12 +105,15 @@ def run_index(rebuild: bool = False) -> dict[str, int]:
             "doc_version_policy": settings.doc_version_policy,
         }
     )
-    vectors.ensure_schema(probe_dimension(embedder))
+    embed_dim = probe_dimension(embedder)
     if rebuild:
-        vectors.clear()
+        # drop before ensure_schema — clears legacy rows AND lets the
+        # embedding column resize when the provider dimension changes
+        vectors.drop_schema()
         jobs.clear_registry()
         for coll in COLLECTIONS:
             lexical.clear(coll)
+    vectors.ensure_schema(embed_dim)
 
     candidates = [
         (p, coll) for root, coll in _collection_dirs(settings) for p in iter_documents(root)
@@ -194,15 +197,13 @@ def run_index(rebuild: bool = False) -> dict[str, int]:
         else settings.bedrock_embed_model
     )
     for coll in COLLECTIONS:
-        vectors.record_index_meta(
-            coll, model, "", settings.embedding_dim, settings.embedding_provider
-        )
+        vectors.record_index_meta(coll, model, "", embed_dim, settings.embedding_provider)
         lexical.record_index_meta(
             coll,
             {
                 "embed_model": model,
                 "embed_version": "",
-                "embed_dim": settings.embedding_dim,
+                "embed_dim": embed_dim,
                 "provider": settings.embedding_provider,
             },
         )

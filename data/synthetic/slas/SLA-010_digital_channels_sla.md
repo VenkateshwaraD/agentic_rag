@@ -1,6 +1,6 @@
 # Service Level Agreement — Digital Channels SLA
 
-<!-- doc_id: SLA-010 | scope: digital_channels_sla -->
+<!-- doc_id: SLA-010 | scope: digital_channels_sla | doc_type: sla -->
 
 ## §1 Processing Cutoffs
 Transactions received before the cutoff are processed same business day; items

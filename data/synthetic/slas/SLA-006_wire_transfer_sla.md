@@ -1,6 +1,6 @@
 # Service Level Agreement — Wire Transfer SLA
 
-<!-- doc_id: SLA-006 | scope: wire_transfer_sla -->
+<!-- doc_id: SLA-006 | scope: wire_transfer_sla | doc_type: sla -->
 
 ## §1 Processing Cutoffs
 Transactions received before the cutoff are processed same business day; items

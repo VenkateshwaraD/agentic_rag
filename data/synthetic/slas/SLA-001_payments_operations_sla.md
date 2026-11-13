@@ -1,6 +1,6 @@
 # Service Level Agreement — Payments Operations SLA
 
-<!-- doc_id: SLA-001 | scope: payments_operations_sla -->
+<!-- doc_id: SLA-001 | scope: payments_operations_sla | doc_type: sla -->
 
 ## §1 Processing Cutoffs
 Transactions received before the cutoff are processed same business day; items

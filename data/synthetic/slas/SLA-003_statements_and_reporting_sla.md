@@ -1,6 +1,6 @@
 # Service Level Agreement — Statements & Reporting SLA
 
-<!-- doc_id: SLA-003 | scope: statements_&_reporting_sla -->
+<!-- doc_id: SLA-003 | scope: statements_&_reporting_sla | doc_type: sla -->
 
 ## §1 Processing Cutoffs
 Transactions received before the cutoff are processed same business day; items

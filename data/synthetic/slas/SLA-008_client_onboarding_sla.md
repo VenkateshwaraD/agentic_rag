@@ -1,6 +1,6 @@
 # Service Level Agreement — Client Onboarding SLA
 
-<!-- doc_id: SLA-008 | scope: client_onboarding_sla -->
+<!-- doc_id: SLA-008 | scope: client_onboarding_sla | doc_type: sla -->
 
 ## §1 Processing Cutoffs
 Transactions received before the cutoff are processed same business day; items

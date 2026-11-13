@@ -1,6 +1,6 @@
 # Client Services Agreement — GrainMark Commodities
 
-<!-- doc_id: AGR-007 | client_id: grainmark | version: 2.0 | effective_date: 2023-12-01 -->
+<!-- doc_id: AGR-007 | client_id: grainmark | version: 2.0 | effective_date: 2023-12-01 | doc_type: agreement -->
 
 ## §1 Parties and Scope
 This Client Services Agreement ("Agreement") is entered into between Example Bank N.A.

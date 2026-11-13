@@ -15,7 +15,6 @@ venv/
 
 # Data / runtime artifacts
 .chroma/
-eval/reports/
 !eval/reports/.gitkeep
 data/real/
 !data/real/.gitkeep

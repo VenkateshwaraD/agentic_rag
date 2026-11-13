@@ -1,6 +1,6 @@
 # Client Services Agreement — LatticePoint Software
 
-<!-- doc_id: AGR-012 | client_id: latticepoint | version: 2.0 | effective_date: 2022-11-01 -->
+<!-- doc_id: AGR-012 | client_id: latticepoint | version: 2.0 | effective_date: 2022-11-01 | doc_type: agreement -->
 
 ## §1 Parties and Scope
 This Client Services Agreement ("Agreement") is entered into between Example Bank N.A.

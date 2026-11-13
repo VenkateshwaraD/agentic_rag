@@ -1,6 +1,6 @@
 # Service Level Agreement — Escalations SLA
 
-<!-- doc_id: SLA-009 | scope: escalations_sla -->
+<!-- doc_id: SLA-009 | scope: escalations_sla | doc_type: sla -->
 
 ## §1 Processing Cutoffs
 Transactions received before the cutoff are processed same business day; items

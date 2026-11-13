@@ -1,6 +1,6 @@
 # Client Services Agreement — Acme Manufacturing Corp
 
-<!-- doc_id: AGR-001 | client_id: acme | version: 1.0 | effective_date: 2024-02-01 -->
+<!-- doc_id: AGR-001 | client_id: acme | version: 1.0 | effective_date: 2024-02-01 | doc_type: agreement | expiry_date: 2024-06-01 -->
 
 ## §1 Parties and Scope
 This Client Services Agreement ("Agreement") is entered into between Example Bank N.A.

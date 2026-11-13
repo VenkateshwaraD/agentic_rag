@@ -1,6 +1,6 @@
 # Service Level Agreement — Trade Settlement SLA
 
-<!-- doc_id: SLA-002 | scope: trade_settlement_sla -->
+<!-- doc_id: SLA-002 | scope: trade_settlement_sla | doc_type: sla -->
 
 ## §1 Processing Cutoffs
 Transactions received before the cutoff are processed same business day; items

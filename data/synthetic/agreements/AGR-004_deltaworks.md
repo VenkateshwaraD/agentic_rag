@@ -1,6 +1,6 @@
 # Client Services Agreement — DeltaWorks Industries
 
-<!-- doc_id: AGR-004 | client_id: deltaworks | version: 2.0 | effective_date: 2023-10-01 -->
+<!-- doc_id: AGR-004 | client_id: deltaworks | version: 2.0 | effective_date: 2023-10-01 | doc_type: agreement -->
 
 ## §1 Parties and Scope
 This Client Services Agreement ("Agreement") is entered into between Example Bank N.A.

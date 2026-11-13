@@ -20,6 +20,7 @@ from app.core.constants import ABSTENTION_MESSAGE, EV_AGENT_STEP
 _SENT_RE = re.compile(r"(?<=[.!?])\s+")
 _NUM_RE = re.compile(r"\d+(?:[.,]\d+)*")
 _WORD_RE = re.compile(r"[A-Za-z]{5,}")
+_CITE_RE = re.compile(r"\[[^\]]*\]")
 _MAX_CLAIMS = 12
 
 
@@ -76,6 +77,10 @@ def _claim_supported(claim: str, cited_text: str, all_text: str) -> bool:
         return False
     hay_primary = cited_text.lower() or all_text.lower()
     hay_all = all_text.lower()
+    # strip inline [DOC §sec] citation markers — their tokens (doc ids,
+    # section numbers) are not claim content and would never appear in
+    # the passage text
+    claim = _CITE_RE.sub(" ", claim)
     claim_nums = set(_NUM_RE.findall(claim))
     if claim_nums:
         # every numeric in the claim must appear in *some* evidence;

@@ -89,8 +89,10 @@ class VectorStore:
                 "ALTER TABLE chunks ADD COLUMN IF NOT EXISTS embed_model TEXT DEFAULT ''",
                 "ALTER TABLE chunks ADD COLUMN IF NOT EXISTS embed_version TEXT DEFAULT ''",
                 "ALTER TABLE chunks ADD COLUMN IF NOT EXISTS embed_dim INT DEFAULT 0",
+                # partial unique index — legacy rows with empty chunk_id
+                # predate the id scheme and must not block creation
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_chunks_source_chunkid "
-                "ON chunks(source, chunk_id)",
+                "ON chunks(source, chunk_id) WHERE chunk_id != ''",
                 "CREATE INDEX IF NOT EXISTS idx_chunks_hash ON chunks(content_hash)",
                 "CREATE INDEX IF NOT EXISTS idx_chunks_parent ON chunks(parent_id)",
                 """
@@ -141,6 +143,13 @@ class VectorStore:
         with self._connect() as conn, conn.cursor() as cur:
             cur.execute("TRUNCATE chunks")
 
+    def drop_schema(self) -> None:
+        """Drop chunks + index_meta entirely (rebuild — handles dim changes
+        and legacy rows a TRUNCATE/IF NOT EXISTS can't fix)."""
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute("DROP TABLE IF EXISTS chunks CASCADE")
+            cur.execute("DROP TABLE IF EXISTS index_meta")
+
     def upsert(self, chunks: list[Chunk], embeddings: list[list[float]]) -> int:
         """Bulk-insert chunks with embeddings; idempotent on (source, chunk_id).
 
@@ -184,7 +193,7 @@ class VectorStore:
                                     text, embedding)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                         %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (source, chunk_id) DO NOTHING""",
+                ON CONFLICT (source, chunk_id) WHERE chunk_id != '' DO NOTHING""",
                 rows,
             )
         return len(rows)

@@ -1,6 +1,6 @@
 # Client Services Agreement — JuniperSky Airlines
 
-<!-- doc_id: AGR-010 | client_id: junipersky | version: 1.0 | effective_date: 2023-11-01 -->
+<!-- doc_id: AGR-010 | client_id: junipersky | version: 1.0 | effective_date: 2023-11-01 | doc_type: agreement -->
 
 ## §1 Parties and Scope
 This Client Services Agreement ("Agreement") is entered into between Example Bank N.A.

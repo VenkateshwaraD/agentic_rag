@@ -1,6 +1,6 @@
 # Client Service Team Directory
 
-<!-- doc_id: SVC-001 -->
+<!-- doc_id: SVC-001 | doc_type: ops -->
 
 ## §1 Team Directory
 | Team | Coverage hours | Region | Contact |

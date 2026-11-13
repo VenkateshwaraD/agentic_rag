@@ -145,21 +145,22 @@ def ingest_document(
     except Exception as exc:
         return _fail(path, collection, "redact", "redact", exc)
 
-    # stamp embedding metadata for the index registry
-    model = (
-        settings.local_embed_model
-        if settings.embedding_provider == "local"
-        else settings.bedrock_embed_model
-    )
-    for c in chunks:
-        c.embed_model = model
-        c.embed_dim = settings.embedding_dim
-
     # stage: embed
     try:
         embeddings = embedder.embed_documents([c.text for c in chunks])
     except Exception as exc:
         return _fail(path, collection, "embed", "embedding", exc)
+
+    # stamp the *actual* embedding metadata (local ≠ configured dim)
+    model = (
+        settings.local_embed_model
+        if settings.embedding_provider == "local"
+        else settings.bedrock_embed_model
+    )
+    actual_dim = len(embeddings[0]) if embeddings else settings.embedding_dim
+    for c in chunks:
+        c.embed_model = model
+        c.embed_dim = actual_dim
 
     # stage: index (both stores — pgvector first, then OpenSearch)
     try:

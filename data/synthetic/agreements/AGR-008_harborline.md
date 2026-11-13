@@ -1,6 +1,6 @@
 # Client Services Agreement — Harborline Shipping Co
 
-<!-- doc_id: AGR-008 | client_id: harborline | version: 1.0 | effective_date: 2024-12-01 -->
+<!-- doc_id: AGR-008 | client_id: harborline | version: 1.0 | effective_date: 2024-12-01 | doc_type: agreement -->
 
 ## §1 Parties and Scope
 This Client Services Agreement ("Agreement") is entered into between Example Bank N.A.

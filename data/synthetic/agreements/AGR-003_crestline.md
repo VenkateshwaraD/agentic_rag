@@ -1,6 +1,6 @@
 # Client Services Agreement — Crestline Logistics LLC
 
-<!-- doc_id: AGR-003 | client_id: crestline | version: 2.0 | effective_date: 2023-06-01 -->
+<!-- doc_id: AGR-003 | client_id: crestline | version: 2.0 | effective_date: 2023-06-01 | doc_type: agreement -->
 
 ## §1 Parties and Scope
 This Client Services Agreement ("Agreement") is entered into between Example Bank N.A.

@@ -1,6 +1,6 @@
 # Client Services Agreement — Foxglove Retail Holdings
 
-<!-- doc_id: AGR-006 | client_id: foxglove | version: 2.0 | effective_date: 2022-02-01 -->
+<!-- doc_id: AGR-006 | client_id: foxglove | version: 2.0 | effective_date: 2022-02-01 | doc_type: agreement -->
 
 ## §1 Parties and Scope
 This Client Services Agreement ("Agreement") is entered into between Example Bank N.A.

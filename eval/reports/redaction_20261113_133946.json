@@ -1,0 +1,117 @@
+{
+  "ts": "2026-11-13T13:39:46.288455Z",
+  "samples": 12,
+  "precision": 1.0,
+  "recall": 0.9167,
+  "preserve_violations": 0,
+  "per_sample": [
+    {
+      "text": "Dispute of wire transfer fee \u2014 contact Maria Delgado (maria.delgado@acme.example",
+      "expected": {
+        "PERSON": 1,
+        "EMAIL_ADDRESS": 1,
+        "PHONE_NUMBER": 1
+      },
+      "found": {
+        "EMAIL_ADDRESS": 1,
+        "PERSON": 1,
+        "PHONE_NUMBER": 1
+      },
+      "preserve_violations": []
+    },
+    {
+      "text": "Statement not received \u2014 contact Priya Nair (priya.nair@bluepeak.example.com, +1",
+      "expected": {
+        "PERSON": 1,
+        "EMAIL_ADDRESS": 1,
+        "PHONE_NUMBER": 1
+      },
+      "found": {
+        "EMAIL_ADDRESS": 1,
+        "PERSON": 1,
+        "PHONE_NUMBER": 1
+      },
+      "preserve_violations": []
+    },
+    {
+      "text": "Applicant SSN 123-45-6789 verified.",
+      "expected": {
+        "US_SSN": 1
+      },
+      "found": {},
+      "preserve_violations": []
+    },
+    {
+      "text": "Card 4111 1111 1111 1111 was declined.",
+      "expected": {
+        "CREDIT_CARD": 1
+      },
+      "found": {
+        "CREDIT_CARD": 1
+      },
+      "preserve_violations": []
+    },
+    {
+      "text": "Wire to account ACC-123456 was returned.",
+      "expected": {
+        "ACCOUNT_NUMBER": 1
+      },
+      "found": {
+        "ACCOUNT_NUMBER": 1
+      },
+      "preserve_violations": []
+    },
+    {
+      "text": "Access request for staff member EMP-1024.",
+      "expected": {
+        "EMPLOYEE_ID": 1
+      },
+      "found": {
+        "EMPLOYEE_ID": 1
+      },
+      "preserve_violations": []
+    },
+    {
+      "text": "Ticket TKT-00037 is currently open.",
+      "expected": {},
+      "found": {},
+      "preserve_violations": []
+    },
+    {
+      "text": "Trade TRD-00012 settled on 2025-03-14.",
+      "expected": {},
+      "found": {},
+      "preserve_violations": []
+    },
+    {
+      "text": "See agreement AGR-001 \u00a72 for the fee schedule.",
+      "expected": {},
+      "found": {},
+      "preserve_violations": []
+    },
+    {
+      "text": "SLA-006 defines the wire cutoff.",
+      "expected": {},
+      "found": {},
+      "preserve_violations": []
+    },
+    {
+      "text": "Ticket TKT-00042 \u2014 contact John Smith (john.smith@corp.example.com)",
+      "expected": {
+        "PERSON": 1,
+        "EMAIL_ADDRESS": 1
+      },
+      "found": {
+        "EMAIL_ADDRESS": 1,
+        "PERSON": 1
+      },
+      "preserve_violations": []
+    },
+    {
+      "text": "The outgoing domestic wire fee is $25.00 per item.",
+      "expected": {},
+      "found": {},
+      "preserve_violations": []
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # Client Services Agreement — IronVale Mining Corp
 
-<!-- doc_id: AGR-009 | client_id: ironvale | version: 1.0 | effective_date: 2023-05-01 -->
+<!-- doc_id: AGR-009 | client_id: ironvale | version: 1.0 | effective_date: 2023-05-01 | doc_type: agreement | expiry_date: 2024-06-01 -->
 
 ## §1 Parties and Scope
 This Client Services Agreement ("Agreement") is entered into between Example Bank N.A.
