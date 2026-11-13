@@ -24,6 +24,18 @@ _MIN_RERANK_SCORE = -2.0  # BGE logits; negative ~0 is a reasonable relevance ba
 _NUM_RE = re.compile(r"\d+(?:[.,]\d+)*")
 
 
+def _relevance_ok(r: dict) -> bool:
+    """Relevance gate: rerank_score applies only when the reranker ran.
+
+    Dense-only, BM25-only and hybrid (no rerank) results carry ``score`` /
+    ``rrf_score`` but no ``rerank_score`` — they already survived top-k
+    ranking, so absence of a rerank score must not mark them irrelevant.
+    """
+    if "rerank_score" in r:
+        return r["rerank_score"] > _MIN_RERANK_SCORE
+    return "score" in r or "rrf_score" in r
+
+
 def _detect_conflicts(retrieved: list[dict]) -> list[dict]:
     """Return contradiction pairs found among retrieved chunks.
 
@@ -98,7 +110,7 @@ def grade(state):
     has_rows = any(tr.get("rows") for tr in tool_results)
     tool_errors = [tr for tr in tool_results if tr.get("error")]
     store_errors = [c for c, d in state.get("diagnostics", {}).items() if d.get("error")]
-    good_docs = [r for r in retrieved if r.get("rerank_score", -99) > _MIN_RERANK_SCORE]
+    good_docs = [r for r in retrieved if _relevance_ok(r)]
     expected_tools = len(state.get("ops_calls", []))
     missing_tools = sum(1 for tr in tool_results if not tr.get("rows") and not tr.get("error"))
 

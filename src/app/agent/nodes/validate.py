@@ -57,40 +57,45 @@ def _citation_valid(cit: dict, retrieved: list[dict]) -> bool:
 
 
 def _passages_for(citation: dict, retrieved: list[dict]) -> str:
-    """Return the concatenated text of passages a citation points at."""
+    """Return the concatenated text of passages a citation points at.
+
+    Matches doc_id + section; when the citation carries a ``chunk_id``,
+    only that versioned chunk counts as support — a same-named section in
+    another version is not interchangeable evidence.
+    """
     return " ".join(
         r.get("text", "")
         for r in retrieved
         if r.get("doc_id") == citation.get("doc_id")
         and str(r.get("section")) == str(citation.get("section"))
+        and (not citation.get("chunk_id") or r.get("chunk_id") == citation["chunk_id"])
     )
 
 
-def _claim_supported(claim: str, cited_text: str, all_text: str) -> bool:
+def _claim_supported(claim: str, cited_text: str) -> bool:
     """Heuristic support check: claim numbers and content words must appear
-    in the cited passage (falling back to any retrieved passage).
+    in the *cited* passage — a fact asserted under one citation is not
+    established by unrelated evidence elsewhere.
 
     Approximate by design — the optional LLM verdict can be layered on top;
     offline mode keeps this deterministic.
     """
-    if not cited_text and not all_text:
+    hay = cited_text.lower()
+    if not hay:
         return False
-    hay_primary = cited_text.lower() or all_text.lower()
-    hay_all = all_text.lower()
     # strip inline [DOC §sec] citation markers — their tokens (doc ids,
     # section numbers) are not claim content and would never appear in
     # the passage text
     claim = _CITE_RE.sub(" ", claim)
     claim_nums = set(_NUM_RE.findall(claim))
     if claim_nums:
-        # every numeric in the claim must appear in *some* evidence;
-        # prefer the cited passage but tolerate adjacent sections
-        return all(n in hay_primary or n in hay_all for n in claim_nums)
+        # every numeric must be asserted in the cited passage itself
+        return all(n in hay for n in claim_nums)
     words = {w.lower() for w in _WORD_RE.findall(claim)}
     words -= {"about", "their", "there", "which", "would", "could", "should", "based"}
     if not words:
         return True
-    hits = sum(1 for w in words if w in hay_primary or w in hay_all)
+    hits = sum(1 for w in words if w in hay)
     return hits / len(words) >= 0.6
 
 
@@ -108,7 +113,13 @@ def validate(state):
     draft = state["draft"]
     retrieved = state.get("retrieved", [])
     citations = state.get("citations", [])
-    all_text = " ".join(r.get("text", "") for r in retrieved)
+    # ops tool rows are evidence too — tool-only claims validate against
+    # them when the claim cites "[<tool> system]"
+    import json as _json
+
+    tool_text = " ".join(
+        _json.dumps(tr.get("rows", []), default=str) for tr in state.get("tool_results", [])
+    )
 
     with Timer() as t:
         claims = extract_claims(draft)
@@ -116,9 +127,20 @@ def validate(state):
         claim_results = []
         unsupported = []
         for claim in claims:
-            cited = [c for c in citations if f"[{c['doc_id']} §{c['section']}]" in claim]
+            cited = [
+                c
+                for c in citations
+                if f"[{c['doc_id']} §{c['section']}]" in claim or f"[{c['doc_id']}]" in claim
+            ]
             cited_text = " ".join(_passages_for(c, retrieved) for c in cited)
-            supported = _claim_supported(claim, cited_text, all_text)
+            # tool-cited claims pull support from the ops evidence pool
+            tool_cited = any(
+                f"[{tr['tool']} system]" in claim for tr in state.get("tool_results", [])
+            )
+            if not cited_text and tool_cited:
+                cited_text = tool_text
+            # uncited claims cannot be verified — claim-level evidence required
+            supported = bool(cited_text) and _claim_supported(claim, cited_text)
             claim_results.append(
                 {"text": claim[:200], "cited": bool(cited), "supported": supported}
             )

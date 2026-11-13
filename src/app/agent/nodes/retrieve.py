@@ -27,17 +27,18 @@ def _run_ops_tool(tool: str, principal, client_id: str | None, extra: dict, conn
     of the graph consumes — typed rows become dicts, structured errors and
     freshness/pass-through fields are carried alongside.
     """
+    filters = (extra.get("ops_filters") or {}).get(tool, {})
     if tool == "accounts":
         res = get_accounts_store().get(AccountsQuery(client_id=client_id), principal, conn=conn)
     elif tool == "trades":
         res = get_trades_store().get(
-            TradesQuery(trade_id=extra.get("trade_id"), client_id=client_id),
+            TradesQuery(trade_id=extra.get("trade_id"), client_id=client_id, **filters),
             principal,
             conn=conn,
         )
     elif tool == "tickets":
         res = get_tickets_store().get(
-            TicketsQuery(ticket_id=extra.get("ticket_id"), client_id=client_id),
+            TicketsQuery(ticket_id=extra.get("ticket_id"), client_id=client_id, **filters),
             principal,
             conn=conn,
         )

@@ -103,7 +103,7 @@ def enqueue(state, reply: str) -> list[str] | None:
         return reasons
     except Exception as exc:
         log.warning("review.enqueue_failed", error=str(exc)[:200])
-        return reasons  # still flag pending_review — review intent recorded
+        return None  # no row exists — pending_review must not claim one does
 
 
 def list_pending(limit: int = 50) -> list[dict]:

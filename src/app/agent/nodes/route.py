@@ -66,6 +66,56 @@ _OPS_KEYWORDS = {
     "tickets": ("ticket", "case", "history", "previous issue", "complaint", "tkt-"),
     "accounts": ("account", "tier", "region", "agreement on file", "account details"),
 }
+# keyword → schema-value maps for heuristic ops filters — the typed
+# TradesQuery/TicketsQuery fields, extracted from the question so
+# "show failed trades" actually filters status=failed
+_OPS_FILTER_KEYWORDS = {
+    "trades": {
+        "status": {
+            "failed": "failed",
+            "returned": "returned",
+            "settled": "settled",
+            "pending": "pending",
+        },
+        "trade_type": {
+            "wire": "wire",
+            "ach": "ach",
+            "check": "check",
+            "book transfer": "book_transfer",
+        },
+    },
+    "tickets": {
+        "status": {
+            "open": "open",
+            "in progress": "in_progress",
+            "resolved": "resolved",
+            "closed": "closed",
+        },
+        "category": {
+            "fee dispute": "fee_dispute",
+            "missing statement": "missing_statement",
+            "failed wire": "failed_wire",
+            "cutoff": "cutoff_inquiry",
+            "access request": "access_request",
+        },
+    },
+}
+
+
+def _ops_filters(question: str, ops: list[str]) -> dict:
+    """Extract ops-query filters from question keywords (heuristic path)."""
+    q = question.lower()
+    out: dict = {}
+    for tool in ops:
+        fields = {}
+        for field, mapping in _OPS_FILTER_KEYWORDS.get(tool, {}).items():
+            for kw, val in mapping.items():
+                if kw in q:
+                    fields[field] = val
+                    break
+        if fields:
+            out[tool] = fields
+    return out
 
 
 def _heuristic_route(question: str) -> dict:
@@ -117,8 +167,11 @@ def route(state):
         if decision is None:
             decision = _heuristic_route(state["question"])
         # constrain to entitled clients — asking about a client the user
-        # can't see refuses rather than answering with other clients' data
-        cid = (decision.get("client_id") or "").lower() or None
+        # can't see refuses rather than answering with other clients' data.
+        # an explicit request hint (API client_id) takes precedence over
+        # what the router extracted from the question text.
+        hint = (state.get("extra") or {}).get("client_id")
+        cid = (hint or decision.get("client_id") or "").lower() or None
         denied = bool(cid) and cid not in principal.client_ids
         if denied:
             cid = None
@@ -150,6 +203,8 @@ def route(state):
     )
     extra = dict(state.get("extra", {}))
     extra.update({"client_id": cid, **extra_ids})
+    if filters := _ops_filters(state["question"], ops):
+        extra["ops_filters"] = filters
     if denied:
         return {
             "refusal": True,

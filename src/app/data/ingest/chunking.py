@@ -145,11 +145,17 @@ def _split_paragraphs(body: str) -> list[str]:
     return paras if len(paras) > 1 else [body]
 
 
-def _build_entitlements(client_id: str, source: str) -> dict:
+def _build_entitlements(client_id: str, source: str, roles: str = "") -> dict:
     """Client-scoped docs (agreements) restrict to the owning client;
-    bank-wide docs (SLAs, service teams) are visible to all entitled clients."""
+    bank-wide docs (SLAs, service teams) are visible to all entitled clients.
+
+    ``roles`` is an optional comma-separated allowlist from document
+    metadata (``roles: senior_agent,admin`` in the header comment) — valid
+    role names only; empty means the default ALL_ROLES visibility.
+    """
     clients = [client_id] if client_id else "*"
-    return {"clients": clients, "roles": ALL_ROLES}
+    parsed = [r.strip() for r in roles.split(",") if r.strip() in ALL_ROLES]
+    return {"clients": clients, "roles": parsed or ALL_ROLES}
 
 
 def _infer_doc_type(meta: dict, path: Path, source: str) -> str:
@@ -182,7 +188,7 @@ def chunk_document(text: str, path: Path, source: str, parent_child: bool = Fals
     doc_type = _infer_doc_type(meta, path, source)
     effective = meta.get("effective_date", date)
     expiry = meta.get("expiry_date", "")
-    ents = _build_entitlements(client_id, source)
+    ents = _build_entitlements(client_id, source, meta.get("roles", ""))
 
     chunks: list[Chunk] = []
     for i, (section, body, page) in enumerate(_split_sections(text)):

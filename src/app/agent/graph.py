@@ -110,11 +110,14 @@ def _seed_state(
     request_id: str,
     trace_id: str,
     max_elapsed_ms: int | None = None,
+    client_id: str | None = None,
 ) -> AgentState:
     """Build the initial agent state including budget counters.
 
     ``max_elapsed_ms`` is an optional per-request timeout override — it can
     only tighten the configured elapsed-time hard limit, never widen it.
+    ``client_id`` is the API's optional scope hint — the route node treats
+    it as authoritative (still entitlement-checked downstream).
     """
     state: AgentState = {
         "question": question,
@@ -122,6 +125,8 @@ def _seed_state(
         "request_id": request_id,
         "trace_id": trace_id or request_id,
     }
+    if client_id:
+        state["extra"] = {"client_id": client_id}
     state.update(cast("AgentState", budget.begin()))
     if max_elapsed_ms:
         state["max_elapsed_ms_override"] = max_elapsed_ms
@@ -186,6 +191,7 @@ def answer(
     request_id: str,
     trace_id: str = "",
     max_elapsed_ms: int | None = None,
+    client_id: str | None = None,
 ) -> dict:
     """Synchronous entry point used by API, CLI, and eval runner.
 
@@ -198,7 +204,7 @@ def answer(
     from app.core.constants import EV_QUERY
     from app.core.dependencies import get_graph
 
-    state = _seed_state(question, principal, request_id, trace_id, max_elapsed_ms)
+    state = _seed_state(question, principal, request_id, trace_id, max_elapsed_ms, client_id)
     audit(state, EV_QUERY, {"question": question})
     _, config = _graph_config(request_id, principal.user_id)
     result = get_graph().invoke(state, config=config)
@@ -211,6 +217,7 @@ def stream_answer(
     request_id: str,
     trace_id: str = "",
     max_elapsed_ms: int | None = None,
+    client_id: str | None = None,
 ):
     """Yield ``{type, node, payload}`` events for the SSE endpoint.
 
@@ -224,7 +231,7 @@ def stream_answer(
     from app.core.constants import EV_QUERY
     from app.core.dependencies import get_graph
 
-    state = _seed_state(question, principal, request_id, trace_id, max_elapsed_ms)
+    state = _seed_state(question, principal, request_id, trace_id, max_elapsed_ms, client_id)
     audit(state, EV_QUERY, {"question": question})
     _, config = _graph_config(request_id, principal.user_id)
     for update in get_graph().stream(state, config=config, stream_mode="updates"):

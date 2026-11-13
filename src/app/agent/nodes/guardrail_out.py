@@ -27,6 +27,13 @@ def guardrail_out(state):
     guardrail decision plus the terminal event, and returns the final
     reply, refusal/abstain flags, review flag, and guardrail log.
     """
+    # Finalize budget state — conditional edges route to this node without
+    # mutating state, so a hard breach would otherwise return refusal=None
+    # and the terminal audit would read as a normal answer.
+    from app.agent import budget
+
+    state = {**state, **(budget.refusal_update(state) or {})}
+
     refusal = state.get("refusal", False)
     abstained = state.get("abstained", False)
     reply = state.get("reply") or (ABSTENTION_MESSAGE if abstained else _REFUSAL)
@@ -64,10 +71,15 @@ def guardrail_out(state):
     if not refusal and review_queue.needs_human_review(state):
         pending_review = bool(review_queue.enqueue(state, reply))
 
-    return {
+    update = {
         "reply": reply,
         "refusal": refusal,
         "abstained": abstained,
         "pending_review": pending_review,
         "guardrail_log": state.get("guardrail_log", []) + [decision],
     }
+    # propagate the budget breach marker + refusal reason set above
+    for k in ("budget_breach", "refusal_reason"):
+        if k in state:
+            update[k] = state[k]
+    return update

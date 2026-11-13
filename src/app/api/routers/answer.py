@@ -45,6 +45,7 @@ def _run_answer(
         principal=principal,
         request_id=request_id,
         max_elapsed_ms=timeout_ms,
+        client_id=body.client_id,
     )
     if idempotency_key:
         idempotency.store(principal.user_id, idempotency_key, body.question, body.client_id, result)
@@ -68,8 +69,11 @@ def post_answer(
     return _run_answer(body, request, principal, idempotency_key, x_timeout_ms)
 
 
+_STREAM_END = object()
+
+
 @router.post("/answer/stream")
-def post_answer_stream(
+async def post_answer_stream(
     body: AnswerRequest,
     request: Request,
     principal: Principal = Depends(get_principal),  # noqa: B008 — FastAPI idiom
@@ -79,15 +83,33 @@ def post_answer_stream(
 
     Emits ``event: node_update`` per node and one ``event: final`` carrying
     the same normalized payload as ``POST /answer``. Client disconnects are
-    checked between events (cooperative cancellation).
+    checked between events — the sync graph generator is closed so no
+    further nodes (LLM calls, retrieval work) execute after disconnect.
     """
+    import anyio
+
     request_id = getattr(request.state, "request_id", uuid.uuid4().hex[:16])
 
-    def events():
+    async def events():
         """Yield SSE-formatted node/final events until the graph finishes."""
-        for ev in stream_answer(body.question, principal, request_id, max_elapsed_ms=x_timeout_ms):
-            name = "final" if ev["type"] == "final" else "node_update"
-            yield f"event: {name}\ndata: {json.dumps(ev, default=str)}\n\n"
+        it = stream_answer(
+            body.question,
+            principal,
+            request_id,
+            max_elapsed_ms=x_timeout_ms,
+            client_id=body.client_id,
+        )
+        try:
+            while True:
+                ev = await anyio.to_thread.run_sync(lambda: next(it, _STREAM_END))
+                if ev is _STREAM_END:
+                    break
+                if await request.is_disconnected():
+                    return  # generator closed in finally — remaining nodes never run
+                name = "final" if ev["type"] == "final" else "node_update"
+                yield f"event: {name}\ndata: {json.dumps(ev, default=str)}\n\n"
+        finally:
+            it.close()
 
     return StreamingResponse(
         events(),
