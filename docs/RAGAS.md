@@ -232,6 +232,11 @@ Each run writes two files to `eval/reports/`:
 - `eval_<timestamp>.md` — human-readable, open this one
 - `eval_<timestamp>.json` — the same data, machine-readable
 
+A real report (22-question dev suite) looks like this — full image in
+[appendix A.4](#appendix-a-what-the-running-system-looks-like):
+
+![eval report](screenshots/eval_report.png)
+
 A summary table looks like:
 
 ```json
@@ -334,3 +339,32 @@ trend matters more than the point value.
 | `context_recall` always low | test rows lack good `expected_answer` references — or drop the metric in `ragas.yaml` |
 | All scores low on a no-key run | expected — without a key the copilot emits draft answers; set the key and rerun |
 | Threshold gate fails on missing scores | the judge didn't run — check the API key before blaming quality |
+
+---
+
+## Appendix A — what the running system looks like
+
+Real screenshots from a live run (all committed under `docs/screenshots/`).
+
+**A.1 — Chat UI** (`streamlit run src/ui/app.py`, port 8501). Pick a test
+user, type a question; citations and answerability appear under each reply.
+
+![chat ui](screenshots/copilot_ui.png)
+
+**A.2 — API surface** (`uvicorn app.main:app`, `/docs`). The versioned
+`/api/v1` routes — answer, SSE stream, health, and the admin endpoints
+(jobs, DLQ, documents, consistency).
+
+![api docs](screenshots/api_docs.png)
+
+**A.3 — One live answer.** The question, the reply, its versioned
+citations, and the claim-level validation the *internal* checker produced
+— this is the per-row evidence Ragas scores sit on top of.
+
+![live answer](screenshots/answer_example.png)
+
+**A.4 — An eval report** (22-row dev suite). Summary table first, then
+per-category breakdown, then the `failures` list — every row that missed
+any metric with its reply text and which scores fell short.
+
+![eval report](screenshots/eval_report.png)
