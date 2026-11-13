@@ -43,13 +43,18 @@ VALUES (:request_id, :trace_id, :user_id, :event_type, CAST(:payload AS jsonb), 
 
 
 def _redact_payload(value: Any) -> Any:
-    """Recursively PII-redact string values in an audit payload."""
+    """Recursively PII-redact string values and coerce non-JSON types."""
+    from enum import Enum
+
     redactor = get_pii_redactor()
+    if isinstance(value, Enum):
+        # enums (FailureType, Answerability, ...) are not JSON-serializable
+        return _redact_payload(value.value)
     if isinstance(value, str):
         return redactor.redact(value)
     if isinstance(value, dict):
         return {k: _redact_payload(v) for k, v in value.items()}
-    if isinstance(value, list):
+    if isinstance(value, list | tuple):
         return [_redact_payload(v) for v in value]
     return value
 
@@ -89,7 +94,7 @@ class AuditWriter:
                         "trace_id": trace_id,
                         "user_id": user_id,
                         "event_type": event_type,
-                        "payload": _json.dumps(_redact_payload(payload)),
+                        "payload": _json.dumps(_redact_payload(payload), default=str),
                         "latency_ms": latency_ms,
                     },
                 )
