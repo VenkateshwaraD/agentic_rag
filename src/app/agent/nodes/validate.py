@@ -24,23 +24,35 @@ _CITE_RE = re.compile(r"\[[^\]]*\]")
 _MAX_CLAIMS = 12
 
 
+def _claims_with_lines(draft: str) -> list[tuple[str, str]]:
+    """Split the draft into (claim, source_line) pairs.
+
+    Lines are split first — each bullet is its own claim, so tokens from a
+    differently-cited line can never leak into a claim. The line is kept so
+    citations sitting anywhere on the same bullet line count as evidence
+    for every claim on it (drafts append the marker mid- or end-of-line).
+    """
+    out: list[tuple[str, str]] = []
+    for line in draft.splitlines():
+        for sent in _SENT_RE.split(line):
+            s = sent.strip().lstrip("-*").strip()
+            if (
+                len(s) > 20
+                and not s.startswith("[offline-draft")
+                and not s.startswith("Note:")
+                and not s.endswith(":")
+            ):
+                out.append((s, line))
+    return out[:_MAX_CLAIMS]
+
+
 def extract_claims(draft: str) -> list[str]:
     """Split the draft into claim sentences for per-claim support checks.
 
     Headings, bullets, and the offline-draft marker line are skipped; the
     result is capped so validation stays bounded on verbose answers.
     """
-    claims: list[str] = []
-    for sent in _SENT_RE.split(draft):
-        s = sent.strip().lstrip("-*").strip()
-        if (
-            len(s) > 20
-            and not s.startswith("[offline-draft")
-            and not s.startswith("Note:")
-            and not s.endswith(":")
-        ):
-            claims.append(s)
-    return claims[:_MAX_CLAIMS]
+    return [c for c, _ in _claims_with_lines(draft)]
 
 
 def _citation_valid(cit: dict, retrieved: list[dict]) -> bool:
@@ -122,15 +134,17 @@ def validate(state):
     )
 
     with Timer() as t:
-        claims = extract_claims(draft)
+        claims = _claims_with_lines(draft)
         invalid_citations = [c for c in citations if not _citation_valid(c, retrieved)]
         claim_results = []
         unsupported = []
-        for claim in claims:
+        for claim, line in claims:
+            # a citation marker anywhere on the claim's line counts —
+            # bullets cite the whole line, not just the final sentence
             cited = [
                 c
                 for c in citations
-                if f"[{c['doc_id']} §{c['section']}]" in claim or f"[{c['doc_id']}]" in claim
+                if f"[{c['doc_id']} §{c['section']}]" in line or f"[{c['doc_id']}]" in line
             ]
             cited_text = " ".join(_passages_for(c, retrieved) for c in cited)
             # tool-cited claims pull support from the ops evidence pool
