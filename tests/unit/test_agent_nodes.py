@@ -370,3 +370,22 @@ def test_table_rows_render_label_value():
     text = "Intro sentence.\n| Payment rail | Same-day cutoff |\n|---|---|\n| Domestic wires | 17:00 ET |"
     assert synth._table_rows(text) == ["Domestic wires: 17:00 ET"]
     assert synth._table_rows("just prose, no pipes") == []
+
+
+def test_clarification_message_for_vague_question():
+    """A vague abstain asks which client/topic instead of 'won't guess'."""
+    st = _state(question="What is the fee?", abstained=True, reply="")
+    st["extra"] = {}
+    msg = guardrail_out._clarification_message(st)
+    assert msg and "which client" in msg and "acme" in msg
+
+
+def test_clarification_skipped_for_specific_question():
+    """A specific-but-unanswerable question keeps the honest abstention."""
+    st = _state(
+        question="What is the crypto custody fee for bluepeak?",
+        abstained=True,
+        reply="",
+    )
+    st["extra"] = {"client_id": "bluepeak"}
+    assert guardrail_out._clarification_message(st) is None

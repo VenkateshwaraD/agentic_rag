@@ -30,11 +30,16 @@ def _sec_key(section) -> str:
     return str(section or "").lstrip("§").strip()
 
 
-def _format_evidence(state) -> str:
-    """Render retrieved chunks and PII-redacted tool rows as a prompt evidence block."""
+def _pii():
+    """Lazy accessor for the shared PII redactor."""
     from app.core.dependencies import get_pii_redactor
 
-    redactor = get_pii_redactor()
+    return get_pii_redactor()
+
+
+def _format_evidence(state) -> str:
+    """Render retrieved chunks and PII-redacted tool rows as a prompt evidence block."""
+    redactor = _pii()
     parts = []
     for r in state.get("retrieved", []):
         meta = f"v{r['doc_version']}" if r.get("doc_version") else ""
@@ -125,7 +130,7 @@ def _table_rows(text: str) -> list[str]:
 _TOOL_ROW_FIELDS = {
     "tickets": ("ticket_id", "status", "category", "subject", "created_at"),
     "trades": ("trade_id", "status", "amount", "currency", "value_date", "settled_at"),
-    "accounts": ("account_id", "tier", "region", "status", "opened_at"),
+    "accounts": ("name", "tier", "region", "owner_team", "agreement_doc"),
 }
 _TOOL_ROW_CAP = 5
 
@@ -184,7 +189,11 @@ def _offline_draft(state) -> str:
     for tr in state.get("tool_results", []):
         rows = tr.get("rows", [])
         for row in rows[:_TOOL_ROW_CAP]:
-            parts.append(f"- {_format_tool_row(tr['tool'], row)} [{tr['tool']} system]")
+            # ops rows are raw DB output — PII-redact before they enter the
+            # draft, same as the LLM evidence path does (else check_output
+            # would have to refuse rather than show masked values)
+            safe_row = _pii().redact(_format_tool_row(tr["tool"], row))
+            parts.append(f"- {safe_row} [{tr['tool']} system]")
         if len(rows) > _TOOL_ROW_CAP:
             # 'Note:' lines are skipped by the claim extractor — not a claim
             parts.append(f"Note: {len(rows) - _TOOL_ROW_CAP} further rows omitted for brevity.")

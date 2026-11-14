@@ -3,6 +3,8 @@
 Author: venkateshwara doijode
 """
 
+import re
+
 from app.agent.nodes.common import Timer, audit
 from app.core.constants import (
     ABSTENTION_MESSAGE,
@@ -16,6 +18,44 @@ from app.core.constants import (
 from app.security.guardrails import check_output
 
 _REFUSAL = REFUSAL_MESSAGE
+
+_QUESTION_STOPWORDS = frozenset(
+    {
+        "what", "is", "the", "a", "an", "of", "to", "for", "me", "my", "show",
+        "tell", "give", "how", "much", "does", "do", "are", "any", "and",
+        "or", "in", "on", "at", "about", "please", "current", "it", "its",
+        "was", "were", "be", "been", "can", "could", "would", "should",
+        "i", "we", "you", "your", "our", "us", "let", "s",
+    }
+)
+
+
+def _clarification_message(state) -> str | None:
+    """When an abstain traces to a vague question, ask what's missing.
+
+    "What is the fee?" should ask which client and which fee — not emit
+    the generic 'won't guess' message. Only applies to abstains with no
+    drafted reply; a specific-but-unanswerable question keeps the honest
+    abstention text.
+    """
+    principal = state.get("principal")
+    clients = sorted(getattr(principal, "client_ids", ()) or ())
+    extra = state.get("extra") or {}
+    missing_client = not extra.get("client_id") and len(clients) > 1
+    content_words = [
+        w
+        for w in re.findall(r"[a-z]+", state.get("question", "").lower())
+        if w not in _QUESTION_STOPWORDS
+    ]
+    vague_topic = len(content_words) <= 2
+    if not (missing_client or vague_topic):
+        return None
+    asks = []
+    if missing_client:
+        asks.append(f"which client (you're entitled to: {', '.join(clients)})")
+    if vague_topic:
+        asks.append("which specific fee, account, ticket, or topic")
+    return "I don't want to guess — could you tell me " + " and ".join(asks) + "?"
 
 
 def guardrail_out(state):
@@ -37,7 +77,12 @@ def guardrail_out(state):
 
     refusal = state.get("refusal", False)
     abstained = state.get("abstained", False)
-    reply = state.get("reply") or (ABSTENTION_MESSAGE if abstained else _REFUSAL)
+    reply = state.get("reply")
+    if abstained and (not reply or reply == ABSTENTION_MESSAGE):
+        # a vague question gets a clarifying ask, not the generic abstention
+        reply = _clarification_message(state) or ABSTENTION_MESSAGE
+    elif not reply:
+        reply = _REFUSAL
 
     with Timer() as t:
         if not refusal and not abstained:

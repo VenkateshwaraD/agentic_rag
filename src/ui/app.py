@@ -173,14 +173,14 @@ def _agent_steps(turn: dict) -> list[tuple[str, str]]:
     if turn.get("pending_review"):
         steps.append(("review", "enqueued for a human reviewer"))
     b = turn.get("budget") or {}
-    steps.append(
-        (
-            "budget",
-            f"iterations {b.get('iterations')} · tool calls {b.get('tool_calls')}"
-            f" · llm calls {b.get('llm_calls')} · tokens {b.get('tokens_used')}"
-            f" · ${b.get('cost_usd') or 0:.3f}",
-        )
+    budget_line = (
+        f"iterations {b.get('iterations')} · tool calls {b.get('tool_calls')}"
+        f" · llm calls {b.get('llm_calls')} · tokens {b.get('tokens_used')}"
+        f" · ${b.get('cost_usd') or 0:.3f}"
     )
+    if b.get("breach"):
+        budget_line += f" · **BREACH: {b['breach']}**"
+    steps.append(("budget", budget_line))
     return steps
 
 
