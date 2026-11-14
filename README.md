@@ -27,6 +27,9 @@ re-scanned on the output draft.
 
 ## Quickstart
 
+Operational walkthrough — config, keys, input data, run modes, results:
+**`docs/RUNBOOK.md`**.
+
 ```bash
 make install            # venv + deps + spacy model
 cp .env.example .env    # fill ANTHROPIC_API_KEY (+ AWS creds for Bedrock)
