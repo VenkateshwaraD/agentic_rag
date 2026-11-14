@@ -64,6 +64,27 @@ ACL is enforced as a **pre-filter** in pgvector (`WHERE`), OpenSearch
 store. PII is redacted at ingest (Presidio, irreversible placeholders) and
 re-scanned on the output draft.
 
+### Tech stack
+
+| layer | technology | role |
+|---|---|---|
+| UI | Streamlit (`src/ui/app.py`) | chat, agent-step view, eval dashboard, baseline compare |
+| API | FastAPI + Pydantic (`/api/v1`) | authn/z, SSE streaming, idempotency, review queue |
+| Agent workflow | LangGraph (`src/app/agent`) | bounded state machine — route → retrieve → grade → synthesize → validate |
+| LLM | Anthropic Claude (LangChain) | routing + reply drafting; deterministic offline path without a key |
+| Embeddings | Bedrock Titan v2 (prod) · `all-MiniLM-L6-v2` (local) | dense vectors for chunk + query embedding |
+| Vector store | PostgreSQL + pgvector | dense search + ACL pre-filter + doc registry |
+| Lexical store | OpenSearch | BM25 + ACL filter, mirrored per collection |
+| Reranker | `BAAI/bge-reranker-base` cross-encoder | top-k rerank after RRF fusion |
+| Ops data | Postgres (read-only `rag_readonly`) | accounts/trades/tickets, parameterized SELECT-only |
+| PII | Presidio + spaCy | ingest, prompt, output, audit redaction |
+| Ingestion | staged pipeline (`src/app/data/ingest`) | parse → validate → chunk → redact → embed → index; `.md`/`.txt`/`.csv`/`.pdf`/`.docx` input via pypdf + python-docx |
+| Tracing | Langfuse | per-request LLM/step traces |
+| Eval | custom harness + Ragas (`eval/`) | scenario suites, gates, agentic-vs-baseline compare |
+| Deploy | Docker Compose (dev) · K8s/Kustomize on EKS (prod) | External Secrets + IRSA, HPA/PDB, smoke gates |
+| CI | GitHub Actions (SHA-pinned) | lint/type/test + eval leak/threshold gates |
+| Tooling | pytest · ruff · mypy | 100+ unit tests offline-capable; lint + typecheck |
+
 ## Objective
 
 Production-oriented RAG a regulated client-service org could trust — where
