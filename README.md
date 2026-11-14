@@ -5,6 +5,45 @@ inquiries (fees, statements, processing cutoffs, service teams) by searching
 client agreements, SLAs, and service-team docs — plus read-only parameterized
 tools over trade, account, and ticket systems of record.
 
+## Why it exists — the problem
+
+A client-service agent answering "what's the wire fee?" or "did this trade
+settle?" digs through client agreements, SLA documents, and ticketing
+systems by hand. Basic RAG helps but introduces three failure modes a
+regulated service desk can't accept:
+
+- **It leaks.** A naive retriever searches every client's documents — a
+  rep asking about *their* client gets an answer sourced from *someone
+  else's* agreement.
+- **It guesses.** Thin or contradictory evidence still produces a fluent
+  answer, and nothing tells the agent the answer is unreliable.
+- **It can't be audited.** No citations, no record of what was retrieved,
+  no trail when something goes wrong.
+
+## What it does
+
+Runs every question through a controlled LangGraph workflow —
+`guardrail_in → route → retrieve → grade → synthesize → validate →
+guardrail_out` — that enforces entitlements inside the retrieval query,
+drafts only from entitled evidence (docs *and* read-only ops tools),
+independently validates each claim against its citation, and abstains or
+escalates instead of guessing.
+
+## How it's useful — measurable, not asserted
+
+- **Fewer wrong answers reaching clients:** vs a plain-RAG baseline on the
+  same corpus, `answerability_correct` 0.83 vs 0.25 and
+  `key_points_hit` 0.80 vs 0.50 (`eval/reports/compare_*.md`,
+  Baseline compare page).
+- **Zero tenant leakage:** `acl_clean` 1.0 vs 0.25 for the ungated
+  baseline — enforced as a query pre-filter and gated in CI on every PR.
+- **Auditable by default:** every reply carries source citations, every
+  request writes an audit trail, and low-confidence/conflicting answers
+  auto-enqueue for a human reviewer.
+- **Honest when it doesn't know:** abstains on insufficient evidence,
+  surfaces conflicting sources with both citations, refuses unauthorized
+  or injected requests — so the answer an agent reads can be acted on.
+
 ## Architecture
 
 ```
