@@ -87,7 +87,33 @@ python3 eval/compare.py eval/reports/eval_<ts>.json eval/reports/eval_plain_<ts>
   before the ACL variants run. Gates still work on single-system runs
   (e.g. `--system agentic --fail-on-leak`, which is what CI does).
 
-## 4. Configuration that affects the baseline
+## 4. Running with the real LLM
+
+Set `ANTHROPIC_API_KEY` and **both sides upgrade identically** —
+`baseline._baseline_draft` calls the same `get_llm()` as the agentic
+`synthesize` node, so the comparison stays architecture-vs-architecture,
+never model-vs-model:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+export EMBEDDING_PROVIDER=local        # unless you have AWS creds for Bedrock
+python3 eval/runner.py --suite pr --system all
+```
+
+Notes:
+
+- **Do not pass `--no-ragas`** — the Ragas judge runs when the key is
+  present, and `--fail-on-thresholds` then covers its floors too.
+- Expect the adversarial rows to differentiate for real: an LLM drafts
+  fluently around (or straight through) injected instructions, so
+  `no_banned_content` for baselines drops below 1.0 where the offline
+  echo never reached the `PWNED` token.
+- Watch spend — `--system all` is 5 systems × suite rows × ~1 LLM call
+  (agentic makes several per row). `--limit N` is the cheap smoke path.
+- Model is `ANTHROPIC_MODEL` (default `claude-sonnet-4-20250514`); the
+  Ragas judge model lives in `eval/ragas.yaml`.
+
+## 5. Configuration that affects the baseline
 
 The baseline reads the same settings as everything else
 (`src/app/core/config.py`, all via env):
@@ -113,7 +139,7 @@ plain_answer(question, principal, request_id,
 `refusal`, `abstained`, `answerability`, `validation`, `errors`, …) so
 every metric in `eval/metrics.py` applies unchanged.
 
-## 5. What the output looks like
+## 6. What the output looks like
 
 A `compare_<ts>.md` has three parts. Real excerpt from
 `eval/reports/compare_20261114_044827.md` (PR suite):
@@ -142,7 +168,7 @@ category (`doc_factual`, `tool_lookup`, `ambiguous`, `conflicting`,
 *where* the agent earns its keep: expect ties on `doc_factual` and gaps
 everywhere else.
 
-## 6. Reading the results
+## 7. Reading the results
 
 - **`n/a` means "not measured", not zero.** Baselines never run the
   validation node, so `citation_correctness`, `citation_completeness`,
@@ -165,7 +191,7 @@ everywhere else.
   retrieval and enforcement — any remaining gap is provably the agent
   loop (routing, tools, grading, validation, answerability, guardrails).
 
-## 7. Where things live
+## 8. Where things live
 
 | path | role |
 |---|---|
