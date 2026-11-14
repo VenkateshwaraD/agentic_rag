@@ -114,13 +114,13 @@ _OPS_FILTER_KEYWORDS = {
 
 def _ops_filters(question: str, ops: list[str]) -> dict:
     """Extract ops-query filters from question keywords (heuristic path)."""
-    q = question.lower()
+    question_lower = question.lower()
     out: dict = {}
     for tool in ops:
         fields = {}
         for field, mapping in _OPS_FILTER_KEYWORDS.get(tool, {}).items():
             for kw, val in mapping.items():
-                if kw in q:
+                if kw in question_lower:
                     fields[field] = val
                     break
         if fields:
@@ -161,16 +161,16 @@ def _heuristic_route(question: str) -> dict:
     Also extracts a client id when a known client name appears in the
     question. Defaults to all collections when no keyword matches.
     """
-    q = question.lower()
-    sources = [c for c, kws in _KEYWORDS.items() if any(k in q for k in kws)]
+    question_lower = question.lower()
+    sources = [c for c, kws in _KEYWORDS.items() if any(k in question_lower for k in kws)]
     # word-boundary match for ops keywords — "Trade Settlement SLA" must
     # not fire the trades tool, and "showcase" must not fire tickets
     ops = [
         o
         for o, kws in _OPS_KEYWORDS.items()
-        if any(re.search(rf"\b{re.escape(k)}\b", q) for k in kws)
+        if any(re.search(rf"\b{re.escape(k)}\b", question_lower) for k in kws)
     ]
-    cid = _extract_client_id(q)
+    cid = _extract_client_id(question_lower)
     return {"sources": sources or ALL_SOURCES, "ops": ops, "client_id": cid}
 
 

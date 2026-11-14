@@ -237,10 +237,10 @@ def build_redactor() -> PIIRedactor:
     callers (audit payloads, prompt redaction, SSE deltas) share one engine.
     """
     try:
-        r = PresidioRedactor()
-        r.contains_pii("warmup test@example.com")  # smoke: spaCy model load check
+        redactor = PresidioRedactor()
+        redactor.contains_pii("warmup test@example.com")  # smoke: spaCy model load check
         log.info("pii.redactor", engine="presidio")
-        return r
+        return redactor
     except Exception as exc:  # spaCy model missing, etc.
         log.warning("pii.redactor.fallback", engine="regex", reason=str(exc))
         return RegexRedactor()

@@ -36,10 +36,10 @@ def _doc_titles() -> dict[str, str]:
             head = p.read_text()[:4000]
         except OSError:
             continue
-        m = re.search(r"doc_id:\s*([A-Z0-9-]+)", head)
-        t = re.search(r"^#\s+(.+)$", head, re.MULTILINE)
-        if m:
-            out[m.group(1)] = t.group(1).strip() if t else p.stem
+        doc_match = re.search(r"doc_id:\s*([A-Z0-9-]+)", head)
+        title_match = re.search(r"^#\s+(.+)$", head, re.MULTILINE)
+        if doc_match:
+            out[doc_match.group(1)] = title_match.group(1).strip() if title_match else p.stem
     return out
 
 
@@ -129,17 +129,17 @@ def _agent_steps(turn: dict) -> list[tuple[str, str]]:
     ops = ", ".join(t["tool"] for t in tools) or "none"
     steps.append(("route", f"collections → {cols} · ops tools → {ops}"))
     for coll, d in diag.items():
-        c = d.get("counts", {})
+        counts = d.get("counts", {})
         ids = d.get("reranked_ids") or d.get("fused_ids") or d.get("dense_ids") or []
         top = ", ".join(dict.fromkeys(ids)) if ids else "—"
         line = (
-            f"**{coll}** — strategy `{d.get('strategy')}` · dense {c.get('dense', 0)}"
-            f" / bm25 {c.get('bm25', 0)} / fused {c.get('fused', 0)}"
+            f"**{coll}** — strategy `{d.get('strategy')}` · dense {counts.get('dense', 0)}"
+            f" / bm25 {counts.get('bm25', 0)} / fused {counts.get('fused', 0)}"
         )
-        if c.get("stale"):
-            line += f" · stale {c['stale']}"
-        if c.get("parent_expanded"):
-            line += f" · parents +{c['parent_expanded']}"
+        if counts.get("stale"):
+            line += f" · stale {counts['stale']}"
+        if counts.get("parent_expanded"):
+            line += f" · parents +{counts['parent_expanded']}"
         line += f" → {top}"
         if d.get("error"):
             line += f" · ⚠ {d['error']}"
@@ -154,32 +154,32 @@ def _agent_steps(turn: dict) -> list[tuple[str, str]]:
         steps.append(("tool", line))
     if turn.get("answerability"):
         steps.append(("grade", f"answerability → `{turn['answerability']}`"))
-    v = turn.get("validation") or {}
-    if v.get("verdict") not in (None, "", "skipped"):
-        claims = v.get("claims") or []
+    validation = turn.get("validation") or {}
+    if validation.get("verdict") not in (None, "", "skipped"):
+        claims = validation.get("claims") or []
         supported = sum(1 for c in claims if c.get("supported"))
         cited = sum(1 for c in claims if c.get("cited"))
         via_tool = sum(1 for c in claims if c.get("via") == "tool")
         steps.append(
             (
                 "validate",
-                f"verdict `{v['verdict']}` — {supported}/{len(claims)} claims supported"
+                f"verdict `{validation['verdict']}` — {supported}/{len(claims)} claims supported"
                 f" ({via_tool} via tools) · {cited} cited"
-                f" · {len(v.get('invalid_citations') or [])} invalid citations",
+                f" · {len(validation.get('invalid_citations') or [])} invalid citations",
             )
         )
     if turn.get("refusal"):
         steps.append(("guardrail", "reply blocked — refusal issued"))
     if turn.get("pending_review"):
         steps.append(("review", "enqueued for a human reviewer"))
-    b = turn.get("budget") or {}
+    budget = turn.get("budget") or {}
     budget_line = (
-        f"iterations {b.get('iterations')} · tool calls {b.get('tool_calls')}"
-        f" · llm calls {b.get('llm_calls')} · tokens {b.get('tokens_used')}"
-        f" · ${b.get('cost_usd') or 0:.3f}"
+        f"iterations {budget.get('iterations')} · tool calls {budget.get('tool_calls')}"
+        f" · llm calls {budget.get('llm_calls')} · tokens {budget.get('tokens_used')}"
+        f" · ${budget.get('cost_usd') or 0:.3f}"
     )
-    if b.get("breach"):
-        budget_line += f" · **BREACH: {b['breach']}**"
+    if budget.get("breach"):
+        budget_line += f" · **BREACH: {budget['breach']}**"
     steps.append(("budget", budget_line))
     return steps
 
@@ -277,15 +277,15 @@ def _fmtv(v, nd: int = 3) -> str:
 
 def _report_label(p: Path) -> str:
     """'agentic · pr · 14 Nov 10:42' from eval[_system]_<ts>.json filenames."""
-    m = re.match(r"eval(?:_([a-z-]+))?_(\d{8})_(\d{6})", p.stem)
-    if not m:
+    eval_match = re.match(r"eval(?:_([a-z-]+))?_(\d{8})_(\d{6})", p.stem)
+    if not eval_match:
         return p.stem
-    system = m.group(1) or "agentic"
+    system = eval_match.group(1) or "agentic"
     try:
-        ts = datetime.strptime(m.group(2) + m.group(3), "%Y%m%d%H%M%S")
+        ts = datetime.strptime(eval_match.group(2) + eval_match.group(3), "%Y%eval_match%d%H%M%S")
         stamp = ts.strftime("%d %b %H:%M")
     except ValueError:
-        stamp = m.group(2)
+        stamp = eval_match.group(2)
     suite = ""
     try:
         suite = Path(
@@ -415,11 +415,13 @@ def eval_page():
 
 def _ts_label(stem: str) -> str:
     """'compare · 14 Nov 10:42' from compare_<ts> stems."""
-    m = re.search(r"(\d{8})_(\d{6})", stem)
-    if not m:
+    date_match = re.search(r"(\d{8})_(\d{6})", stem)
+    if not date_match:
         return stem
     try:
-        return datetime.strptime(m.group(1) + m.group(2), "%Y%m%d%H%M%S").strftime("%d %b %H:%M")
+        return datetime.strptime(
+            date_match.group(1) + date_match.group(2), "%Y%date_match%d%H%M%S"
+        ).strftime("%d %b %H:%M")
     except ValueError:
         return stem
 

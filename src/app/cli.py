@@ -57,17 +57,17 @@ def db_init():
     first), and ensures the audit table exists in the rag database.
     """
     configure_logging()
-    s = get_settings()
+    settings = get_settings()
     seed = PROJECT_ROOT / "db" / "seed"
 
-    with psycopg.connect(s.ops_admin_database_url, autocommit=True) as conn:
+    with psycopg.connect(settings.ops_admin_database_url, autocommit=True) as conn:
         conn.execute((seed / "init_ops.sql").read_text())
         conn.execute((seed / "readonly_role.sql").read_text())
     log.info("db.ops_schema_ready")
 
-    engine = create_engine(s.ops_admin_database_url)
+    engine = create_engine(settings.ops_admin_database_url)
     for table in ("accounts", "trades", "tickets"):
-        csv_path = s.synthetic_dir / "ops" / f"{table}.csv"
+        csv_path = settings.synthetic_dir / "ops" / f"{table}.csv"
         if not csv_path.exists():
             typer.echo(f"missing {csv_path} — run `copilot corpus generate` first")
             raise typer.Exit(1)
@@ -137,8 +137,8 @@ def evalset_generate(output: Path | None = None):
     from generate_evalset import generate as gen  # noqa: E402
 
     path = output or (get_settings().eval_dir / "golden_set.jsonl")
-    n = gen(path)
-    typer.echo(f"wrote {n} questions → {path}")
+    count = gen(path)
+    typer.echo(f"wrote {count} questions → {path}")
 
 
 @eval_app.command("run")

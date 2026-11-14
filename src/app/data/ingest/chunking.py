@@ -80,10 +80,10 @@ def parse_metadata_comment(text: str) -> dict[str, str]:
 
     Returns an empty dict when the document has no metadata comment.
     """
-    m = _META_RE.search(text)
-    if not m:
+    match = _META_RE.search(text)
+    if not match:
         return {}
-    inner = m.group(0).removeprefix("<!--").removesuffix("-->")
+    inner = match.group(0).removeprefix("<!--").removesuffix("-->")
     meta: dict[str, str] = {}
     for part in inner.split("|"):
         if ":" in part:

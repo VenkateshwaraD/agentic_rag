@@ -102,7 +102,7 @@ def enqueue(state, reply: str) -> list[str] | None:
         log.info("review.enqueued", request_id=state.get("request_id"), reasons=reasons)
         return reasons
     except Exception as exc:
-        log.warning("review.enqueue_failed", error=str(exc)[:200])
+        log.warning("review.enqueue_failed", error=type(exc).__name__)
         return None  # no row exists — pending_review must not claim one does
 
 
@@ -147,7 +147,8 @@ def count_pending() -> int:
                     text("SELECT count(*) FROM review_queue WHERE status = 'pending'")
                 ).scalar_one()
             )
-    except Exception:
+    except Exception as exc:
+        log.debug("review.count_failed", error=type(exc).__name__)
         return -1
 
 

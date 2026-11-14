@@ -35,8 +35,8 @@ def _hard_breach_or_refusal(state: AgentState) -> bool:
     """Check budget/cancel without mutating state — used by edge functions."""
     if state.get("refusal") or state.get("cancelled"):
         return True
-    b = budget.breach(state)
-    return bool(b and b["hard"])
+    limits = budget.breach(state)
+    return bool(limits and limits["hard"])
 
 
 def _after_guardrail_in(state: AgentState) -> str:
@@ -70,38 +70,38 @@ def _after_validate(state: AgentState) -> str:
 
 def build_graph():
     """Wire the agent nodes and conditional edges into a compiled LangGraph."""
-    g = StateGraph(AgentState)
-    g.add_node("guardrail_in", guardrail_in.guardrail_in)
-    g.add_node("route", route.route)
-    g.add_node("retrieve", retrieve.retrieve)
-    g.add_node("grade", grade.grade)
-    g.add_node("rewrite", rewrite.rewrite)
-    g.add_node("synthesize", synthesize.synthesize)
-    g.add_node("validate", validate.validate)
-    g.add_node("guardrail_out", guardrail_out.guardrail_out)
+    graph_builder = StateGraph(AgentState)
+    graph_builder.add_node("guardrail_in", guardrail_in.guardrail_in)
+    graph_builder.add_node("route", route.route)
+    graph_builder.add_node("retrieve", retrieve.retrieve)
+    graph_builder.add_node("grade", grade.grade)
+    graph_builder.add_node("rewrite", rewrite.rewrite)
+    graph_builder.add_node("synthesize", synthesize.synthesize)
+    graph_builder.add_node("validate", validate.validate)
+    graph_builder.add_node("guardrail_out", guardrail_out.guardrail_out)
 
-    g.set_entry_point("guardrail_in")
-    g.add_conditional_edges(
+    graph_builder.set_entry_point("guardrail_in")
+    graph_builder.add_conditional_edges(
         "guardrail_in", _after_guardrail_in, {"route": "route", "refuse": "guardrail_out"}
     )
-    g.add_conditional_edges(
+    graph_builder.add_conditional_edges(
         "route", _after_route, {"retrieve": "retrieve", "refuse": "guardrail_out"}
     )
-    g.add_edge("retrieve", "grade")
-    g.add_conditional_edges(
+    graph_builder.add_edge("retrieve", "grade")
+    graph_builder.add_conditional_edges(
         "grade",
         _after_grade,
         {"rewrite": "rewrite", "answer": "synthesize", "refuse": "guardrail_out"},
     )
-    g.add_edge("rewrite", "retrieve")
-    g.add_conditional_edges(
+    graph_builder.add_edge("rewrite", "retrieve")
+    graph_builder.add_conditional_edges(
         "synthesize", _after_synthesize, {"validate": "validate", "out": "guardrail_out"}
     )
-    g.add_conditional_edges(
+    graph_builder.add_conditional_edges(
         "validate", _after_validate, {"resynthesize": "synthesize", "out": "guardrail_out"}
     )
-    g.add_edge("guardrail_out", END)
-    return g.compile()
+    graph_builder.add_edge("guardrail_out", END)
+    return graph_builder.compile()
 
 
 def _seed_state(

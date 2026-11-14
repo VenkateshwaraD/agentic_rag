@@ -14,9 +14,9 @@ def guardrail_in(state):
     Runs the injection/length checks, audits the decision, and either sets
     a refusal (blocked) or records an allowed entry in the guardrail log.
     """
-    q = state["question"]
+    question = state["question"]
     with Timer() as t:
-        result = check_input(q)
+        result = check_input(question)
     audit(
         state,
         EV_GUARDRAIL,

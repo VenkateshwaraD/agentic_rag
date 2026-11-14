@@ -254,7 +254,8 @@ class LexicalStore:
             return None
         try:
             doc = self._client.get(index=name, id="_meta")
-        except Exception:
+        except Exception as exc:
+            log.debug("lexical.meta_fetch_failed", index=name, error=type(exc).__name__)
             return None
         return doc.get("_source") if doc.get("found") else None
 

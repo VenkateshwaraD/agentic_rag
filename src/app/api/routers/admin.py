@@ -82,14 +82,18 @@ def ingest_dlq_retry(path: str):
     from app.data.ingest.pipeline import ingest_document
     from app.retrieval.indexing import _collection_dirs
 
-    p = Path(path).resolve()
+    resolved = Path(path).resolve()
     coll = next(
-        (c for root, c in _collection_dirs(get_settings()) if p.is_relative_to(root.resolve())),
+        (
+            c
+            for root, c in _collection_dirs(get_settings())
+            if resolved.is_relative_to(root.resolve())
+        ),
         None,
     )
     if coll is None:
         raise NotFoundError(f"{path} is not under a known collection directory")
-    result = ingest_document(p, coll)
+    result = ingest_document(resolved, coll)
     if result.status == "failed":
         raise AppError(
             f"retry failed at stage {result.stage}: {'; '.join(result.errors)}",

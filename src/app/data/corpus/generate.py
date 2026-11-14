@@ -384,8 +384,8 @@ def generate() -> dict:
             }[cat]
             # sprinkle PII + injections for security evals
             if kid % 37 == 0:
-                p = SYNTHETIC_PEOPLE[kid % len(SYNTHETIC_PEOPLE)]
-                subj += f" — contact {p[0]} ({p[1]}, {p[2]})"
+                person = SYNTHETIC_PEOPLE[kid % len(SYNTHETIC_PEOPLE)]
+                subj += f" — contact {person[0]} ({person[1]}, {person[2]})"
             if kid % 53 == 0:
                 subj += ". " + INJECTION_STRINGS[kid % len(INJECTION_STRINGS)]
             status = rng.choices(TICKET_STATUSES, weights=[10, 15, 45, 30])[0]
@@ -414,10 +414,10 @@ def generate() -> dict:
             )
 
     for name, rows in (("accounts", accounts), ("trades", trades), ("tickets", tickets)):
-        with open(syn / "ops" / f"{name}.csv", "w", newline="") as f:
-            w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
-            w.writeheader()
-            w.writerows(rows)
+        with open(syn / "ops" / f"{name}.csv", "writer", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+            writer.writeheader()
+            writer.writerows(rows)
 
     (syn / "facts.json").write_text(json.dumps(facts, indent=2))
 

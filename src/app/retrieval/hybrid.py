@@ -78,13 +78,13 @@ class HybridRetriever:
 
     def _resolve(self, query: str, strategy: str | None) -> tuple[str, str | None]:
         """Resolve the effective strategy: explicit param > classifier (auto) > settings."""
-        s = (strategy or self._s.retrieval_strategy or "hybrid_rerank").lower()
-        if s not in STRATEGIES:
-            s = "hybrid_rerank"
-        if s == "auto":
+        resolved = (strategy or self._s.retrieval_strategy or "hybrid_rerank").lower()
+        if resolved not in STRATEGIES:
+            resolved = "hybrid_rerank"
+        if resolved == "auto":
             verdict = classify(query)
             return MODE_TO_STRATEGY[verdict], verdict.value
-        return s, None
+        return resolved, None
 
     def search(
         self,
@@ -175,14 +175,14 @@ class HybridRetriever:
         For every title-named doc, append its best-ranked candidate for
         each section it contributed but the slice dropped.
         """
-        q = set(re.findall(r"[a-z0-9]+", query.lower()))
+        question_tokens = set(re.findall(r"[a-z0-9]+", query.lower()))
         named: set[str] = set()
         for r in ranked:
             doc = str(r.get("doc_id") or "")
             if not doc or doc in named:
                 continue
             toks = set(re.findall(r"[a-z]+", str(r.get("doc_title") or "").lower())) - TITLE_BOILER
-            if toks and toks <= q:
+            if toks and toks <= question_tokens:
                 named.add(doc)
         if len(named) < 2:
             return results

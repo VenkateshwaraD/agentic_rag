@@ -81,15 +81,15 @@ def ingest_document(
     lexical = lexical or get_opensearch()
 
     # stage: validate (path-level pre-checks)
-    v = validate_path(path)
-    if v.status != "ok":
+    validation = validate_path(path)
+    if validation.status != "ok":
         return IngestResult(
             path=str(path),
             collection=collection,
             status="skipped",
-            reason=v.status,
+            reason=validation.status,
             stage="validate",
-            errors=[v.detail],
+            errors=[validation.detail],
         )
 
     # stage: parse

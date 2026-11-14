@@ -36,7 +36,10 @@ from app.core.constants import (
     COLLECTION_SLAS,
 )
 from app.core.dependencies import get_hybrid
+from app.core.logging import get_logger
 from app.security.authz import acl_for
+
+log = get_logger(__name__)
 
 ALL_COLLECTIONS = [COLLECTION_AGREEMENTS, COLLECTION_SLAS, COLLECTION_SERVICE_TEAMS]
 
@@ -67,8 +70,10 @@ def _search_all(query: str, acl, strategy: str, top_k: int) -> list[dict]:
     for coll in ALL_COLLECTIONS:
         try:
             out = hybrid.search(query, coll, acl, strategy=strategy)
-        except Exception:
-            continue  # a store being down degrades the baseline silently
+        except Exception as exc:
+            # a store being down degrades the baseline to the remaining collections
+            log.debug("baseline.store_unavailable", collection=coll, error=type(exc).__name__)
+            continue
         for r in out["results"]:
             r["collection"] = coll
         merged.extend(out["results"])
@@ -92,8 +97,9 @@ def _baseline_draft(question: str, retrieved: list[dict]) -> str:
         )
         try:
             return get_llm().invoke(prompt).content
-        except Exception:
-            pass  # fall through to the deterministic draft
+        except Exception as exc:
+            # fall through to the deterministic draft
+            log.debug("baseline.llm_draft_failed", error=type(exc).__name__)
     return _offline_draft({"retrieved": retrieved, "tool_results": []})
 
 

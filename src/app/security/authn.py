@@ -45,8 +45,8 @@ def load_users(path: str | Path | None = None) -> dict[str, dict]:
     cross-tenant reads), so a fixture that violates this fails closed.
     Cached but reloaded when the file's mtime changes.
     """
-    p = Path(path or get_settings().users_file)
-    users = _load_users_cached(str(p), p.stat().st_mtime)
+    users_path = Path(path or get_settings().users_file)
+    users = _load_users_cached(str(users_path), users_path.stat().st_mtime)
     seen: dict[str, str] = {}
     for uid, u in users.items():
         key = u.get("api_key")

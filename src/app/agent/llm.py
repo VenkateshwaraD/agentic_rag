@@ -13,11 +13,11 @@ def get_llm():
     """Return the cached ``ChatAnthropic`` client configured from settings."""
     from langchain_anthropic import ChatAnthropic
 
-    s = get_settings()
+    settings = get_settings()
     return ChatAnthropic(
-        model=s.anthropic_model,
-        api_key=s.anthropic_api_key or None,
+        model=settings.anthropic_model,
+        api_key=settings.anthropic_api_key or None,
         max_tokens=1024,
         temperature=0,
-        timeout=float(s.llm_timeout_s),
+        timeout=float(settings.llm_timeout_s),
     )

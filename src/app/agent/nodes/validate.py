@@ -54,20 +54,21 @@ def _claims_with_lines(draft: str) -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
     for line in draft.splitlines():
         for sent in _SENT_RE.split(line):
-            s = sent.strip().lstrip("-*").strip()
+            sentence = sent.strip().lstrip("-*").strip()
             if (
-                len(s) > 20
-                and not s.startswith("[offline-draft")
+                len(sentence) > 20
+                and not sentence.startswith("[offline-draft")
                 # controlled caveat text authored by ``_caveat_prefix`` is
                 # meta-commentary in *every* draft mode — never a claim.
                 # Other 'Note:' lines skip only in offline drafts, where
-                # they're template annotations; an LLM's Note: is verified
+                # they're template annotations; an LLM'sentence Note: is verified
                 and not (
-                    s.lower().startswith(_CAVEAT_PREFIXES) or (offline and s.startswith("Note:"))
+                    sentence.lower().startswith(_CAVEAT_PREFIXES)
+                    or (offline and sentence.startswith("Note:"))
                 )
-                and not s.endswith(":")
+                and not sentence.endswith(":")
             ):
-                out.append((s, line))
+                out.append((sentence, line))
     return out
 
 
@@ -92,11 +93,11 @@ def _num_tokens(text: str) -> set:
     """
     out = set()
     for tok in _NUM_RE.findall(text):
-        t = tok.replace(",", "")
+        cleaned = tok.replace(",", "")
         try:
-            out.add(Decimal(t))
+            out.add(Decimal(cleaned))
         except InvalidOperation:
-            out.add(t)
+            out.add(cleaned)
     return out
 
 

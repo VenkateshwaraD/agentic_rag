@@ -39,22 +39,22 @@ def _elapsed_ms(state) -> float:
 
 def breach(state) -> dict | None:
     """Return ``{limit, used, cap, hard}`` for the first breached limit, else None."""
-    s = get_settings()
+    settings = get_settings()
     checks = [
-        ("iterations", state.get("iterations", 0), s.agent_max_iterations, True),
-        ("tool_calls", state.get("tool_call_count", 0), s.agent_max_tool_calls, True),
+        ("iterations", state.get("iterations", 0), settings.agent_max_iterations, True),
+        ("tool_calls", state.get("tool_call_count", 0), settings.agent_max_tool_calls, True),
         # per-request timeout header can tighten (never widen) the cap
         (
             "elapsed_ms",
             _elapsed_ms(state),
             min(
-                state.get("max_elapsed_ms_override") or s.agent_max_elapsed_ms,
-                s.agent_max_elapsed_ms,
+                state.get("max_elapsed_ms_override") or settings.agent_max_elapsed_ms,
+                settings.agent_max_elapsed_ms,
             ),
             True,
         ),
-        ("tokens", state.get("tokens_used", 0), s.agent_max_tokens, False),
-        ("cost_usd", state.get("cost_usd", 0.0), s.agent_max_cost_usd, False),
+        ("tokens", state.get("tokens_used", 0), settings.agent_max_tokens, False),
+        ("cost_usd", state.get("cost_usd", 0.0), settings.agent_max_cost_usd, False),
     ]
     for limit, used, cap, hard in checks:
         if used >= cap:
@@ -68,15 +68,17 @@ def refusal_update(state) -> dict | None:
     Soft breaches (tokens/cost) only record ``budget_breach`` — the request
     continues to synthesis with the evidence gathered so far.
     """
-    b = breach(state)
-    if b is None:
+    limits = breach(state)
+    if limits is None:
         return None
-    if not b["hard"]:
-        return {"budget_breach": b}
+    if not limits["hard"]:
+        return {"budget_breach": limits}
     return {
-        "budget_breach": b,
+        "budget_breach": limits,
         "refusal": True,
-        "refusal_reason": (f"execution budget exceeded: {b['limit']} ({b['used']} ≥ {b['cap']})"),
+        "refusal_reason": (
+            f"execution budget exceeded: {limits['limit']} ({limits['used']} ≥ {limits['cap']})"
+        ),
     }
 
 
@@ -89,8 +91,8 @@ def record_llm_usage(state, response) -> dict[str, Any]:
     usage = getattr(response, "usage_metadata", None) or {}
     in_tok = int(usage.get("input_tokens", 0) or 0)
     out_tok = int(usage.get("output_tokens", 0) or 0)
-    s = get_settings()
-    in_rate, out_rate = LLM_COST_RATES.get(s.anthropic_model, LLM_COST_RATES["default"])
+    settings = get_settings()
+    in_rate, out_rate = LLM_COST_RATES.get(settings.anthropic_model, LLM_COST_RATES["default"])
     cost = (in_tok * in_rate + out_tok * out_rate) / 1_000_000
     return {
         "llm_calls": state.get("llm_calls", 0) + 1,

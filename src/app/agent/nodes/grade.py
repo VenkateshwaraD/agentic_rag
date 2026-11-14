@@ -88,14 +88,14 @@ def _title_named_docs(question: str, rows: list[dict]) -> set[str]:
     the point), while 'the fee for bluepeak' names a *scope* — several
     client docs can still contradict each other within it.
     """
-    q = set(re.findall(r"[a-z0-9]+", question.lower()))
+    question_tokens = set(re.findall(r"[a-z0-9]+", question.lower()))
     named: set[str] = set()
     for r in rows:
         doc = str(r.get("doc_id") or "")
         if not doc:
             continue
         toks = set(re.findall(r"[a-z]+", str(r.get("doc_title", "")).lower())) - TITLE_BOILER
-        if toks and toks <= q:
+        if toks and toks <= question_tokens:
             named.add(doc)
     return named
 
@@ -109,11 +109,11 @@ def _named_docs(question: str, rows: list[dict]) -> set[str]:
     names AGR-002 via its client id. A divergent claim slot should lead
     with the docs the user asked about, not whichever pair sorts first.
     """
-    q = set(re.findall(r"[a-z0-9]+", question.lower()))
+    question_tokens = set(re.findall(r"[a-z0-9]+", question.lower()))
     named = _title_named_docs(question, rows)
     for r in rows:
         doc = str(r.get("doc_id") or "")
-        if doc and r.get("client_id") and r["client_id"] in q:
+        if doc and r.get("client_id") and r["client_id"] in question_tokens:
             named.add(doc)
     return named
 
