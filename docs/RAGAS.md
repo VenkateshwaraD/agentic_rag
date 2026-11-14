@@ -344,6 +344,8 @@ every collection like one merged index, drafts once, and always claims
 `fully_answerable`. Same corpus, same stores, same embedding model, same
 draft machinery as the agentic pipeline — so any score difference is
 attributable to the agent loop, not to a better retriever or model.
+(Operational how-to — commands, flags, config, report anatomy:
+`docs/BASELINE.md`.)
 
 To keep the comparison honest it comes in two variants on each axis:
 

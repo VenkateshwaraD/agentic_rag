@@ -259,7 +259,8 @@ sequenceDiagram
   or ACL (unless `*-acl` variant). `--system all` runs every variant and
   `eval/compare.py` writes `compare_<ts>.md` — the side-by-side table that
   shows what the agent loop actually earns (the gap lives in conflicting/
-  ambiguous/unanswerable/adversarial rows, not easy factual ones).
+  ambiguous/unanswerable/adversarial rows, not easy factual ones). Full
+  usage/config/result-reading guide: `docs/BASELINE.md`.
 
 ## 8. Deployment shape
 
