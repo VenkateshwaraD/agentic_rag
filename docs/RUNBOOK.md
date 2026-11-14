@@ -45,6 +45,23 @@ cp .env.example .env
 in `API_KEYS` — both checks happen in `security/authn.py`. Dev fixture:
 one key per user — `dev-key-agent1`, `dev-key-agent2`, `dev-key-senior`, `dev-key-admin` (shared keys are rejected).
 
+### Dev users — roles and entitlements (`db/seed/users.json`)
+
+| user | role | entitled clients | used for |
+|---|---|---|---|
+| `u_agent1` | `agent` | acme, bluepeak, crestline, deltaworks | book-A rep — happy-path + unauthorized demos |
+| `u_agent2` | `agent` | everfield, foxglove, grainmark, harborline | book-B rep — cross-tenant isolation tests |
+| `u_senior` | `senior_agent` | all 12 clients | supervisor — answers what agents can't |
+| `u_admin` | `admin` | all 12 clients | ops/admin — plus holds `X-Admin-Token` for `/api/v1/admin/*` + `/api/v1/audit/*` |
+
+**Role vs client scope:** a chunk is visible iff
+`entitlements.roles ∋ user.role` **and** (`clients == "*"` or `client_id ∈ user.client_ids`)
+(`security/authz.py` — enforced as a pre-filter in pgvector, OpenSearch, and ops SQL).
+Roles exist for *role-restricted documents* (`roles: senior_agent,admin` in a doc
+header) — no corpus doc declares `roles:` today, so per-user `client_ids` are what
+differentiate agents in practice. Admin endpoints are gated by the `X-Admin-Token`
+header, not the `admin` role.
+
 **Production:** do not put secrets in `.env` or manifests — prod k8s uses
 `ExternalSecret` (AWS Secrets Manager); see `docs/PROD_RUNBOOK.md` and `deploy/README.md`.
 

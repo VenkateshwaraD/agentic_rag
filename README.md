@@ -40,6 +40,11 @@ copilot index --rebuild # chunk → redact → embed → both stores
 copilot ask "What is the wire fee for acme?" --user u_agent1
 ```
 
+Dev users (`db/seed/users.json`): `u_agent1`/`u_agent2` (agent, 4-client
+books), `u_senior` (senior_agent) and `u_admin` (admin) — all 12 clients;
+per-user keys `dev-key-*`. Full table + role-vs-scope semantics:
+`docs/RUNBOOK.md` §2.
+
 Full local stack (with UI + optional Langfuse):
 
 ```bash
