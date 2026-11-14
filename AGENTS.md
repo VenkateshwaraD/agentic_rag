@@ -39,7 +39,7 @@ copilot db init         # ops schema + readonly role + CSV seed + audit table
 copilot index [--rebuild] # staged ingestion (incremental unless --rebuild)
 copilot docs list|delete|verify|index-info
 copilot jobs list|dlq   # ingestion job status + dead letters
-copilot eval run --suite pr|dev|holdout|golden [--repeat N --fail-on-leak]
+copilot eval run --suite pr|dev|holdout|golden [--repeat N --fail-on-leak --fail-on-thresholds]
 python eval/redaction_eval.py  # PII redaction precision/recall harness
 ```
 
@@ -113,8 +113,8 @@ Verify changes with `make lint` and `make test-unit` before committing.
   across jobs. No `|| true` on deploy steps.
 - Deploy gates: rollout-status checks + `deploy/scripts/smoke.sh`; prod
   pins the built SHA and is `workflow_dispatch` only.
-- Zero-tolerance: `eval/runner.py --suite pr --fail-on-leak` fails the
-  pipeline on any ACL leak.
+- Zero-tolerance: `eval/runner.py --suite pr --fail-on-leak --fail-on-thresholds` fails the
+  pipeline on any ACL leak or deterministic quality-gate breach (eval/gates.yaml).
 
 ## Testing
 

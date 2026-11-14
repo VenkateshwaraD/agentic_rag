@@ -65,6 +65,7 @@ def _score_rows(
             **M.citation_metrics(output, row),
             **M.retrieval_metrics(output, row),
             **M.claim_support_metrics(output),
+            "key_points_hit": M.key_points_metric(output, row),
             "refusal_correct": M.refusal_metric(output, row),
             "answerability_correct": M.answerability_metric(output, row),
             "tool_selection": M.tool_selection_metric(output, row),
@@ -102,6 +103,7 @@ def run_eval(
     run_ragas: bool = True,
     ragas_config_path: Path | None = None,
     fail_on_thresholds: bool = False,
+    gates_path: Path | None = None,
 ) -> Path:
     """Execute the suite (optionally N times) and write a dated report.
 
@@ -131,11 +133,15 @@ def run_eval(
     ]
     result = run_results[0]
     result["version_snapshot"] = M.version_snapshot(dataset_path, len(rows))
+    result["version_snapshot"]["judge_model"] = ragas_cfg.model or s.anthropic_model
     if repeat > 1:
         result["variance"] = M.variance_summary([r["summary"] for r in run_results])
         result["runs"] = repeat
     if ragas_cfg.thresholds:
         result["threshold_checks"] = RC.threshold_checks(result["summary"], ragas_cfg.thresholds)
+    gates = RC.load_gates(gates_path)
+    if gates:
+        result["gate_checks"] = RC.threshold_checks(result["summary"], gates, prefix="")
     report_path = write_report(result)
     log.info(
         "eval.done",
@@ -147,14 +153,16 @@ def run_eval(
     if fail_on_leak and result.get("acl_leaks"):
         log.error("eval.acl_leakage", leaks=result["acl_leaks"])
         raise SystemExit(1)
-    if fail_on_thresholds and any(
-        c["passed"] is False for c in result.get("threshold_checks", {}).values()
-    ):
+    if fail_on_thresholds:
         failed = {
-            k: c for k, c in result.get("threshold_checks", {}).items() if c["passed"] is False
+            k: c
+            for checks in (result.get("threshold_checks", {}), result.get("gate_checks", {}))
+            for k, c in checks.items()
+            if c["passed"] is False
         }
-        log.error("eval.threshold_breach", failed=failed)
-        raise SystemExit(1)
+        if failed:
+            log.error("eval.threshold_breach", failed=failed)
+            raise SystemExit(1)
     return report_path
 
 
@@ -167,12 +175,13 @@ def main(
     ragas: bool = True,
     ragas_config: Path | None = None,
     fail_on_thresholds: bool = False,
+    gates: Path | None = None,
 ):
     """Run an eval suite and write the report (prints the JSON report path).
 
     CLI: ``--suite pr|dev|holdout|golden --limit N --repeat N
     --fail-on-leak --no-ragas --ragas-config eval/ragas.yaml
-    --fail-on-thresholds``.
+    --gates eval/gates.yaml --fail-on-thresholds``.
     """
     print(
         run_eval(
@@ -184,6 +193,7 @@ def main(
             ragas,
             ragas_config,
             fail_on_thresholds,
+            gates,
         )
     )
 

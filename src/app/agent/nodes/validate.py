@@ -15,7 +15,7 @@ Author: venkateshwara doijode
 import re
 
 from app.agent.nodes.common import Timer, audit
-from app.core.constants import ABSTENTION_MESSAGE, EV_AGENT_STEP
+from app.core.constants import ABSTENTION_MESSAGE, EV_AGENT_STEP, Answerability
 
 _SENT_RE = re.compile(r"(?<=[.!?])\s+")
 _NUM_RE = re.compile(r"\d+(?:[.,]\d+)*")
@@ -177,6 +177,7 @@ def validate(state):
                     {
                         "abstained": True,
                         "abstention_reason": "draft failed independent validation",
+                        "answerability": Answerability.INSUFFICIENT,
                         "reply": ABSTENTION_MESSAGE,
                         "validation_action": "out",
                     }

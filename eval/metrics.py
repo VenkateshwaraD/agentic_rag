@@ -20,14 +20,37 @@ def _recall(actual_ids: list, required: set) -> float:
 
 
 def citation_metrics(output: dict, row: dict) -> dict:
-    """Citation precision/recall of the answer's cited doc ids vs. required ones."""
+    """Citation precision/recall of the answer's cited doc ids vs. required ones.
+
+    ``None`` (reported as ``n/a``, excluded from averages) marks undefined
+    cases instead of fabricated scores: no required docs → nothing to
+    measure against; no citations → precision over an empty set is
+    undefined (the miss is still scored by recall).
+    """
     cited = {c["doc_id"] for c in output.get("citations", [])}
     required = set(row.get("required_doc_ids", []))
     if not required:
-        return {"citation_precision": 1.0 if not cited else 0.0, "citation_recall": 1.0}
-    prec = len(cited & required) / len(cited) if cited else 0.0
+        return {"citation_precision": None, "citation_recall": None}
+    if not cited:
+        return {"citation_precision": None, "citation_recall": 0.0}
+    prec = len(cited & required) / len(cited)
     rec = len(cited & required) / len(required)
     return {"citation_precision": prec, "citation_recall": rec}
+
+
+def key_points_metric(output: dict, row: dict) -> float | None:
+    """Fraction of the row's ``key_points`` substrings present in the reply.
+
+    A cheap deterministic correctness check — key points carry the facts
+    that must appear in a correct answer (fees, statuses, dates, names).
+    ``None`` when the row defines no key points or the answer
+    refused/abstained (refusal correctness is scored separately).
+    """
+    key_points = row.get("key_points", [])
+    if not key_points or output.get("refusal") or output.get("abstained"):
+        return None
+    reply = output.get("reply", "").casefold()
+    return sum(1 for kp in key_points if str(kp).casefold() in reply) / len(key_points)
 
 
 def retrieval_metrics(output: dict, row: dict) -> dict:
@@ -184,13 +207,21 @@ def ragas_metrics(samples: list[dict], cfg=None) -> dict:
         api_key = cfg.api_key(fallback=s.anthropic_api_key)
         if not api_key:
             return {}
+        judge_model = cfg.model or s.anthropic_model
+        if judge_model == s.anthropic_model:
+            from app.core.logging import get_logger
+
+            get_logger("eval").warning(
+                "eval.ragas_self_judge",
+                model=judge_model,
+                note="judge model == answer model — scores carry self-preference bias; "
+                "set judge.model in eval/ragas.yaml to a different model",
+            )
         ds = Dataset.from_list(samples)
         result = evaluate(
             ds,
             metrics=chosen,
-            llm=LangchainLLMWrapper(
-                ChatAnthropic(model=cfg.model or s.anthropic_model, api_key=api_key)
-            ),
+            llm=LangchainLLMWrapper(ChatAnthropic(model=judge_model, api_key=api_key)),
             embeddings=LangchainEmbeddingsWrapper(get_embedder()),
             run_config=RunConfig(
                 timeout=cfg.timeout_s,
@@ -261,7 +292,12 @@ def variance_summary(run_summaries: list[dict]) -> dict:
     import math
     import statistics
 
-    keys = {k for s in run_summaries for k, v in s.items() if isinstance(v, (int, float))}
+    keys = {
+        k
+        for s in run_summaries
+        for k, v in s.items()
+        if isinstance(v, (int, float)) and not k.endswith("_n")
+    }
     out = {}
     for k in sorted(keys):
         vals = [s[k] for s in run_summaries if isinstance(s.get(k), (int, float))]
@@ -279,27 +315,47 @@ def variance_summary(run_summaries: list[dict]) -> dict:
     return out
 
 
+_LOWER_IS_BETTER = {"unsupported_claim_rate"}
+
+
 def aggregate(per_row: list[dict]) -> dict:
-    """Mean metrics overall + per category."""
+    """Mean metrics overall + per category.
+
+    ``None`` values are ``n/a`` — excluded from means so undefined metrics
+    (e.g. citation precision on a refusal) neither inflate nor deflate
+    the score. ``<metric>_n`` records how many rows each mean covers.
+    """
     numeric_keys = {
         k for r in per_row for k, v in r["metrics"].items() if isinstance(v, (int, float))
     }
-    summary = {
-        k: round(sum(r["metrics"].get(k, 0) for r in per_row) / max(len(per_row), 1), 4)
-        for k in numeric_keys
-    }
+
+    def _mean(rows: list[dict], key: str) -> float | None:
+        vals = [r["metrics"][key] for r in rows if isinstance(r["metrics"].get(key), (int, float))]
+        return round(sum(vals) / len(vals), 4) if vals else None
+
+    summary = {k: _mean(per_row, k) for k in numeric_keys}
+    summary.update(
+        {
+            f"{k}_n": sum(1 for r in per_row if isinstance(r["metrics"].get(k), (int, float)))
+            for k in numeric_keys
+        }
+    )
     by_cat: dict[str, list[dict]] = defaultdict(list)
     for r in per_row:
         by_cat[r["category"]].append(r)
     by_category = {
         cat: {
             "n": len(rs),
-            **{
-                k: round(sum(r["metrics"].get(k, 0) for r in rs) / len(rs), 4) for k in numeric_keys
-            },
+            **{k: _mean(rs, k) for k in numeric_keys},
         }
         for cat, rs in by_cat.items()
     }
+
+    # most metrics are higher-is-better (flag when < 1.0); rates like
+    # unsupported_claim_rate are lower-is-better (flag when > 0)
+    def _is_bad(key: str, v: float) -> bool:
+        return v > 0 if key in _LOWER_IS_BETTER else v < 1.0
+
     failures = [
         {
             "id": r["id"],
@@ -307,10 +363,12 @@ def aggregate(per_row: list[dict]) -> dict:
             "question": r["question"],
             "reply": r["output"].get("reply", "")[:300],
             "metrics": {
-                k: v for k, v in r["metrics"].items() if isinstance(v, (int, float)) and v < 1.0
+                k: v
+                for k, v in r["metrics"].items()
+                if isinstance(v, (int, float)) and _is_bad(k, v)
             },
         }
         for r in per_row
-        if any(isinstance(v, (int, float)) and v < 1.0 for v in r["metrics"].values())
+        if any(isinstance(v, (int, float)) and _is_bad(k, v) for k, v in r["metrics"].items())
     ]
     return {"summary": summary, "by_category": by_category, "failures": failures}

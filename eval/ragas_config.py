@@ -88,21 +88,48 @@ def load_ragas_config(path: Path | None = None) -> RagasConfig:
     )
 
 
-def threshold_checks(summary: dict, thresholds: dict[str, float]) -> dict:
-    """Compare ``ragas_<metric>`` summary scores against configured floors.
+DEFAULT_GATES_PATH = Path(__file__).resolve().parent / "gates.yaml"
+
+
+def load_gates(path: Path | None = None) -> dict[str, float]:
+    """Load deterministic quality-gate floors from ``eval/gates.yaml``.
+
+    A missing file yields ``{}`` — no deterministic gates. Values are
+    floors on the report's summary means; malformed YAML or non-numeric
+    values raise ``ValueError`` so config mistakes surface loudly.
+    """
+    path = path or DEFAULT_GATES_PATH
+    if not path.exists():
+        return {}
+
+    import yaml  # PyYAML — declared dependency
+
+    raw = yaml.safe_load(path.read_text()) or {}
+    if not isinstance(raw, dict):
+        raise ValueError(f"{path}: top-level mapping expected, got {type(raw).__name__}")
+    try:
+        return {str(k): float(v) for k, v in raw.items()}
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{path}: gate values must be numeric — {exc}") from exc
+
+
+def threshold_checks(summary: dict, thresholds: dict[str, float], prefix: str = "ragas_") -> dict:
+    """Compare ``<prefix><metric>`` summary scores against configured floors.
 
     Returns ``{metric: {value, minimum, passed}}``; a metric is
-    ``passed: None`` when the score is absent (judge didn't run) so the
-    caller can decide whether missing data is a failure.
+    ``passed: None`` when the score is absent (judge didn't run, or the
+    metric was n/a on every row) so the caller can decide whether
+    missing data is a failure. Pass ``prefix=""`` for deterministic
+    metrics (gates.yaml); Ragas thresholds use the default ``ragas_``.
     """
     return {
         name: {
-            "value": summary.get(f"ragas_{name}"),
+            "value": summary.get(f"{prefix}{name}"),
             "minimum": floor,
             "passed": (
                 None
-                if summary.get(f"ragas_{name}") is None
-                else bool(summary[f"ragas_{name}"] >= floor)
+                if summary.get(f"{prefix}{name}") is None
+                else bool(summary[f"{prefix}{name}"] >= floor)
             ),
         }
         for name, floor in thresholds.items()

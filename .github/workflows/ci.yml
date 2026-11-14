@@ -56,8 +56,11 @@ jobs:
         env:
           DATABASE_URL: postgresql://rag:rag@localhost:5432/ragdb
           OPS_DATABASE_URL: postgresql://rag:rag@localhost:5432/opsdb
-      # small PR eval suite — deterministic rows only, zero-tolerance ACL gate
-      - run: python eval/runner.py --suite pr --fail-on-leak
+      # small PR eval suite — deterministic rows only; zero-tolerance ACL
+      # gate + deterministic quality floors (eval/gates.yaml). Ragas keys
+      # are absent without an Anthropic key → their checks report "not
+      # run" and never fail the gate.
+      - run: python eval/runner.py --suite pr --fail-on-leak --fail-on-thresholds
         env:
           DATABASE_URL: postgresql://rag:rag@localhost:5432/ragdb
 

@@ -3,7 +3,13 @@
 enabled: true
 
 judge:
-  model: ""                    # blank → falls back to Settings.anthropic_model
+  # Judge ≠ generator: answers are drafted by claude-sonnet-4-20250514
+  # (Settings.anthropic_model), so the judge is deliberately a different
+  # model — a judge scoring its own outputs carries self-preference bias
+  # (it also shares the generator's blind spots). Leaving this blank
+  # falls back to the answer model and logs an eval.ragas_self_judge
+  # warning; prefer an explicitly different model here.
+  model: "claude-opus-4-1-20250805"
   api_key_env: ANTHROPIC_API_KEY
 
 # Metric subset — comment out a line to skip it.

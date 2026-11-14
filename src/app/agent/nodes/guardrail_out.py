@@ -11,6 +11,7 @@ from app.core.constants import (
     EV_GUARDRAIL,
     EV_REFUSAL,
     REFUSAL_MESSAGE,
+    Answerability,
 )
 from app.security.guardrails import check_output
 
@@ -43,6 +44,9 @@ def guardrail_out(state):
             res = check_output(reply)
             if not res.allowed:
                 refusal, reply = True, _REFUSAL
+                # output-guardrail block is a policy refusal — surface the
+                # same verdict an input-side block would have produced
+                state = {**state, "answerability": Answerability.UNAUTHORIZED}
             decision = {"stage": "output", "allowed": res.allowed, "reason": res.reason}
         else:
             decision = {
@@ -79,7 +83,7 @@ def guardrail_out(state):
         "guardrail_log": state.get("guardrail_log", []) + [decision],
     }
     # propagate the budget breach marker + refusal reason set above
-    for k in ("budget_breach", "refusal_reason"):
+    for k in ("budget_breach", "refusal_reason", "answerability"):
         if k in state:
             update[k] = state[k]
     return update

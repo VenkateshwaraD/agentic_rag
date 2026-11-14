@@ -63,7 +63,9 @@ def _offline_draft(state) -> str:
     keeps the pipeline runnable offline. Clearly marked; never used in prod."""
     parts = ["[offline-draft — no LLM configured] Based on the retrieved evidence:"]
     for r in state.get("retrieved", [])[:3]:
-        snippet = r["text"].strip().split("\n")[0][:300]
+        # flatten to one line so the trailing citation marker covers every
+        # sentence in the snippet — the validator scopes citations per line
+        snippet = " ".join(r["text"].split())[:300]
         parts.append(f"- {snippet} [{r['doc_id']} §{r['section']}]")
     for tr in state.get("tool_results", []):
         for row in tr.get("rows", [])[:3]:

@@ -4,7 +4,7 @@ Author: venkateshwara doijode
 """
 
 from app.agent.nodes.common import Timer, audit
-from app.core.constants import EV_GUARDRAIL
+from app.core.constants import EV_GUARDRAIL, Answerability
 from app.security.guardrails import check_input
 
 
@@ -27,6 +27,7 @@ def guardrail_in(state):
         return {
             "refusal": True,
             "refusal_reason": result.reason,
+            "answerability": Answerability.UNAUTHORIZED,
             "guardrail_log": [{"stage": "input", "allowed": False, "reason": result.reason}],
         }
     return {"guardrail_log": [{"stage": "input", "allowed": True}]}

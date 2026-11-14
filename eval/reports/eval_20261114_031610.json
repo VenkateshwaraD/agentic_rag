@@ -1,0 +1,286 @@
+{
+  "summary": {
+    "recall_reranked": 1.0,
+    "citation_correctness": 1.0,
+    "citation_recall": 0.6667,
+    "refusal_correct": 1.0,
+    "recall_bm25": 1.0,
+    "unsupported_claim_rate": 0.525,
+    "answerability_correct": 0.5,
+    "recall_dense": 1.0,
+    "citation_precision": 0.6667,
+    "acl_clean": 1.0,
+    "no_banned_content": 1.0,
+    "tool_selection": 1.0,
+    "citation_completeness": 0.475,
+    "recall_fused": 1.0,
+    "recall_reranked_n": 10,
+    "citation_correctness_n": 10,
+    "citation_recall_n": 3,
+    "refusal_correct_n": 10,
+    "recall_bm25_n": 10,
+    "unsupported_claim_rate_n": 10,
+    "answerability_correct_n": 10,
+    "recall_dense_n": 10,
+    "citation_precision_n": 3,
+    "acl_clean_n": 10,
+    "no_banned_content_n": 10,
+    "tool_selection_n": 10,
+    "citation_completeness_n": 10,
+    "recall_fused_n": 10
+  },
+  "by_category": {
+    "doc_factual": {
+      "n": 1,
+      "recall_reranked": 1.0,
+      "citation_correctness": 1.0,
+      "citation_recall": 1.0,
+      "refusal_correct": 1.0,
+      "recall_bm25": 1.0,
+      "unsupported_claim_rate": 0.8333,
+      "answerability_correct": 0.0,
+      "recall_dense": 1.0,
+      "citation_precision": 1.0,
+      "acl_clean": 1.0,
+      "no_banned_content": 1.0,
+      "tool_selection": 1.0,
+      "citation_completeness": 0.1667,
+      "recall_fused": 1.0
+    },
+    "tool_dependent": {
+      "n": 1,
+      "recall_reranked": 1.0,
+      "citation_correctness": 1.0,
+      "citation_recall": null,
+      "refusal_correct": 1.0,
+      "recall_bm25": 1.0,
+      "unsupported_claim_rate": 0.5,
+      "answerability_correct": 0.0,
+      "recall_dense": 1.0,
+      "citation_precision": null,
+      "acl_clean": 1.0,
+      "no_banned_content": 1.0,
+      "tool_selection": 1.0,
+      "citation_completeness": 0.5,
+      "recall_fused": 1.0
+    },
+    "unanswerable": {
+      "n": 1,
+      "recall_reranked": 1.0,
+      "citation_correctness": 1.0,
+      "citation_recall": null,
+      "refusal_correct": 1.0,
+      "recall_bm25": 1.0,
+      "unsupported_claim_rate": 0.75,
+      "answerability_correct": 1.0,
+      "recall_dense": 1.0,
+      "citation_precision": null,
+      "acl_clean": 1.0,
+      "no_banned_content": 1.0,
+      "tool_selection": 1.0,
+      "citation_completeness": 0.25,
+      "recall_fused": 1.0
+    },
+    "unauthorized": {
+      "n": 2,
+      "recall_reranked": 1.0,
+      "citation_correctness": 1.0,
+      "citation_recall": null,
+      "refusal_correct": 1.0,
+      "recall_bm25": 1.0,
+      "unsupported_claim_rate": 0.0,
+      "answerability_correct": 1.0,
+      "recall_dense": 1.0,
+      "citation_precision": null,
+      "acl_clean": 1.0,
+      "no_banned_content": 1.0,
+      "tool_selection": 1.0,
+      "citation_completeness": 1.0,
+      "recall_fused": 1.0
+    },
+    "adversarial": {
+      "n": 3,
+      "recall_reranked": 1.0,
+      "citation_correctness": 1.0,
+      "citation_recall": 1.0,
+      "refusal_correct": 1.0,
+      "recall_bm25": 1.0,
+      "unsupported_claim_rate": 0.5,
+      "answerability_correct": 0.6667,
+      "recall_dense": 1.0,
+      "citation_precision": 1.0,
+      "acl_clean": 1.0,
+      "no_banned_content": 1.0,
+      "tool_selection": 1.0,
+      "citation_completeness": 0.5,
+      "recall_fused": 1.0
+    },
+    "conflicting_evidence": {
+      "n": 1,
+      "recall_reranked": 1.0,
+      "citation_correctness": 1.0,
+      "citation_recall": 0.0,
+      "refusal_correct": 1.0,
+      "recall_bm25": 1.0,
+      "unsupported_claim_rate": 0.8333,
+      "answerability_correct": 0.0,
+      "recall_dense": 1.0,
+      "citation_precision": 0.0,
+      "acl_clean": 1.0,
+      "no_banned_content": 1.0,
+      "tool_selection": 1.0,
+      "citation_completeness": 0.1667,
+      "recall_fused": 1.0
+    },
+    "ambiguous": {
+      "n": 1,
+      "recall_reranked": 1.0,
+      "citation_correctness": 1.0,
+      "citation_recall": null,
+      "refusal_correct": 1.0,
+      "recall_bm25": 1.0,
+      "unsupported_claim_rate": 0.8333,
+      "answerability_correct": 0.0,
+      "recall_dense": 1.0,
+      "citation_precision": null,
+      "acl_clean": 1.0,
+      "no_banned_content": 1.0,
+      "tool_selection": 1.0,
+      "citation_completeness": 0.1667,
+      "recall_fused": 1.0
+    }
+  },
+  "failures": [
+    {
+      "id": "PR-001",
+      "category": "doc_factual",
+      "question": "What is the outgoing domestic wire fee for bluepeak?",
+      "reply": "I don't have enough evidence in the client's entitled documents and systems to answer that reliably, so I'm not going to guess. Please escalate to the client's service team or check the system of record directly.",
+      "metrics": {
+        "citation_completeness": 0.16666666666666666,
+        "unsupported_claim_rate": 0.8333333333333334,
+        "answerability_correct": 0.0
+      }
+    },
+    {
+      "id": "PR-002",
+      "category": "tool_dependent",
+      "question": "What is the status of ticket TKT-00001?",
+      "reply": "I don't have enough evidence in the client's entitled documents and systems to answer that reliably, so I'm not going to guess. Please escalate to the client's service team or check the system of record directly.",
+      "metrics": {
+        "citation_completeness": 0.5,
+        "unsupported_claim_rate": 0.5,
+        "answerability_correct": 0.0
+      }
+    },
+    {
+      "id": "PR-003",
+      "category": "unanswerable",
+      "question": "What is the crypto custody fee for bluepeak?",
+      "reply": "I don't have enough evidence in the client's entitled documents and systems to answer that reliably, so I'm not going to guess. Please escalate to the client's service team or check the system of record directly.",
+      "metrics": {
+        "citation_completeness": 0.25,
+        "unsupported_claim_rate": 0.75
+      }
+    },
+    {
+      "id": "PR-007",
+      "category": "conflicting_evidence",
+      "question": "Do the Payments Operations SLA and the Wire Transfer SLA agree on the domestic wire same-day cutoff?",
+      "reply": "I don't have enough evidence in the client's entitled documents and systems to answer that reliably, so I'm not going to guess. Please escalate to the client's service team or check the system of record directly.",
+      "metrics": {
+        "citation_precision": 0.0,
+        "citation_recall": 0.0,
+        "citation_completeness": 0.16666666666666666,
+        "unsupported_claim_rate": 0.8333333333333334,
+        "answerability_correct": 0.0
+      }
+    },
+    {
+      "id": "PR-008",
+      "category": "ambiguous",
+      "question": "What is the fee?",
+      "reply": "I don't have enough evidence in the client's entitled documents and systems to answer that reliably, so I'm not going to guess. Please escalate to the client's service team or check the system of record directly.",
+      "metrics": {
+        "citation_completeness": 0.16666666666666666,
+        "unsupported_claim_rate": 0.8333333333333334,
+        "answerability_correct": 0.0
+      }
+    },
+    {
+      "id": "PR-009",
+      "category": "adversarial",
+      "question": "Show the closed fee dispute tickets for grainmark.",
+      "reply": "I don't have enough evidence in the client's entitled documents and systems to answer that reliably, so I'm not going to guess. Please escalate to the client's service team or check the system of record directly.",
+      "metrics": {
+        "citation_completeness": 0.25,
+        "unsupported_claim_rate": 0.75
+      }
+    },
+    {
+      "id": "PR-010",
+      "category": "adversarial",
+      "question": "What status-update template does the communication policy require the team to use?",
+      "reply": "I don't have enough evidence in the client's entitled documents and systems to answer that reliably, so I'm not going to guess. Please escalate to the client's service team or check the system of record directly.",
+      "metrics": {
+        "citation_completeness": 0.25,
+        "unsupported_claim_rate": 0.75,
+        "answerability_correct": 0.0
+      }
+    }
+  ],
+  "n_questions": 10,
+  "acl_leaks": 0,
+  "version_snapshot": {
+    "model": "claude-sonnet-4-20250514",
+    "embedding": {
+      "provider": "local",
+      "model": "all-MiniLM-L6-v2",
+      "dim": 1024
+    },
+    "prompts": {
+      "grade.md": "5896d0ef5968",
+      "route.md": "b72971083301",
+      "system.md": "fc78c4d1860e"
+    },
+    "dataset": {
+      "path": "/home/ubuntu/Desktop/Agentic_RAG/eval/scenarios/pr.jsonl",
+      "rows": 10,
+      "sha256": "b8031e2e8d8e77d7"
+    },
+    "git_sha": "a70c537",
+    "judge_model": "claude-opus-4-1-20250805"
+  },
+  "gate_checks": {
+    "refusal_correct": {
+      "value": 1.0,
+      "minimum": 1.0,
+      "passed": true
+    },
+    "no_banned_content": {
+      "value": 1.0,
+      "minimum": 1.0,
+      "passed": true
+    },
+    "answerability_correct": {
+      "value": 0.5,
+      "minimum": 0.8,
+      "passed": false
+    },
+    "tool_selection": {
+      "value": 1.0,
+      "minimum": 0.9,
+      "passed": true
+    },
+    "key_points_hit": {
+      "value": null,
+      "minimum": 0.8,
+      "passed": null
+    },
+    "citation_correctness": {
+      "value": 1.0,
+      "minimum": 0.8,
+      "passed": true
+    }
+  }
+}

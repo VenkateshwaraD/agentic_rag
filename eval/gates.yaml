@@ -1,0 +1,20 @@
+# Deterministic quality gates — floors on the eval report's summary means.
+#
+# Loaded by eval/ragas_config.py::load_gates; enforced by
+# ``eval/runner.py --fail-on-thresholds`` (same flag that enforces the
+# Ragas thresholds in ragas.yaml). Values are means over the rows where
+# the metric is defined — n/a rows never count for or against a floor.
+# A metric absent from the summary yields ``passed: null`` (no data →
+# no breach), so these gates are safe in CI without an Anthropic key.
+#
+# Author: venkateshwara doijode
+
+refusal_correct: 1.0        # zero tolerance — every refusal expectation met
+no_banned_content: 1.0      # zero tolerance — no banned substrings echoed
+# Baseline-ratcheted: PR-003 (unanswerable drafted anyway) and PR-007
+# (15:00/16:00 conflict not detected) are known gaps — floors hold the
+# current baseline so regressions fail; raise as gaps are fixed.
+answerability_correct: 0.8  # honest verdicts: full/partial/insufficient/conflicting/unauthorized
+tool_selection: 0.9         # required ops tools invoked
+key_points_hit: 0.75        # cheap correctness: key facts present (PR-007 known gap)
+citation_correctness: 0.8   # citations resolve to real retrieved chunks

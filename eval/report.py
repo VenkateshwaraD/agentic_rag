@@ -32,6 +32,8 @@ def write_report(result: dict) -> Path:
         lines.append("\n## Version snapshot\n")
         emb = vs.get("embedding", {})
         lines.append(f"- model: {vs.get('model')}")
+        if vs.get("judge_model"):
+            lines.append(f"- judge model: {vs.get('judge_model')}")
         lines.append(
             f"- embedding: {emb.get('provider')}/{emb.get('model')} (dim {emb.get('dim')})"
         )
@@ -42,27 +44,37 @@ def write_report(result: dict) -> Path:
         lines.append(f"- git: {vs.get('git_sha')}")
         for name, h in (vs.get("prompts") or {}).items():
             lines.append(f"- prompt {name}: {h}")
+
+    def _fmt(v):
+        return "n/a" if v is None else v
+
+    summary = result.get("summary", {})
+    metric_keys = [k for k in summary if not k.endswith("_n")]
     lines.append("\n## Summary\n")
     lines.append("| metric | value |")
     lines.append("|---|---|")
-    for k, v in result.get("summary", {}).items():
-        lines.append(f"| {k} | {v} |")
+    for k in metric_keys:
+        lines.append(f"| {k} | {_fmt(summary.get(k))} |")
     lines.append("\n## By category\n")
-    lines.append("| category | n | " + " | ".join(result.get("summary", {}).keys()) + " |")
-    sep = "|---|---|" + "---|" * len(result.get("summary", {}))
+    lines.append("| category | n | " + " | ".join(metric_keys) + " |")
+    sep = "|---|---|" + "---|" * len(metric_keys)
     lines.append(sep)
     for cat, stats in result.get("by_category", {}).items():
-        vals = " | ".join(str(stats.get(k, "")) for k in result.get("summary", {}))
+        vals = " | ".join(str(_fmt(stats.get(k, ""))) for k in metric_keys)
         lines.append(f"| {cat} | {stats.get('n')} | {vals} |")
-    checks = result.get("threshold_checks")
-    if checks:
-        lines.append("\n## Ragas quality gates\n")
-        lines.append("| metric | score | minimum | result |")
-        lines.append("|---|---|---|---|")
-        for name, c in checks.items():
-            verdict = {True: "pass", False: "**FAIL**", None: "not run"}[c["passed"]]
-            value = c["value"] if c["value"] is not None else "—"
-            lines.append(f"| {name} | {value} | {c['minimum']} | {verdict} |")
+    for key, title in (
+        ("gate_checks", "Deterministic quality gates"),
+        ("threshold_checks", "Ragas quality gates"),
+    ):
+        checks = result.get(key)
+        if checks:
+            lines.append(f"\n## {title}\n")
+            lines.append("| metric | score | minimum | result |")
+            lines.append("|---|---|---|---|")
+            for name, c in checks.items():
+                verdict = {True: "pass", False: "**FAIL**", None: "not run"}[c["passed"]]
+                value = c["value"] if c["value"] is not None else "—"
+                lines.append(f"| {name} | {value} | {c['minimum']} | {verdict} |")
     variance = result.get("variance")
     if variance:
         lines.append("\n## Variance across runs\n")
