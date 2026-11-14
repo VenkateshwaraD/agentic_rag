@@ -239,4 +239,4 @@ _default_page = _PAGES.get(st.query_params.get("page", ""), "Chat")
 page = st.sidebar.radio(
     "Page", list(_PAGES.values()), index=list(_PAGES.values()).index(_default_page)
 )
-chat_page() if page == "Chat" else eval_page()
+_ = chat_page() if page == "Chat" else eval_page()
