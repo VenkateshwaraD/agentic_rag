@@ -7,13 +7,16 @@ integration-tier.
 Author: venkateshwara doijode
 """
 
+import json
+
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
 
 client = TestClient(app)
 
-AUTH = {"X-API-Key": "dev-key-1", "X-User-Id": "u_agent1"}
+AUTH = {"X-API-Key": "dev-key-agent1", "X-User-Id": "u_agent1"}
 
 
 def test_health_legacy():
@@ -100,3 +103,54 @@ def test_admin_requires_token():
     resp = client.get("/api/v1/admin/review")
     assert resp.status_code == 403
     assert resp.json()["error"]["code"] == "forbidden"
+
+
+def test_api_key_cannot_impersonate_another_user():
+    """A valid key presented with a different X-User-Id is rejected — the
+    key↔user binding is enforced, not just key validity."""
+    resp = client.post(
+        "/api/v1/answer",
+        json={"question": "wire fee?"},
+        headers={"X-API-Key": "dev-key-agent1", "X-User-Id": "u_agent2"},
+    )
+    assert resp.status_code == 401
+
+
+def test_request_id_unsafe_charset_replaced():
+    """A caller-supplied X-Request-Id outside the safe charset is dropped —
+    attacker-controlled strings must not land in logs/audit verbatim."""
+    bad = "bad id<script>stuff"
+    resp = client.post(
+        "/api/v1/answer",
+        json={"question": "x"},
+        headers={"X-Request-Id": bad},
+    )
+    assert resp.headers["X-Request-Id"] != bad
+
+
+def test_users_fixture_rejects_shared_keys(tmp_path):
+    """load_users fails closed when one api_key maps to two users — a shared
+    key lets its holder impersonate either record."""
+    from app.core.errors import UnauthorizedError
+    from app.security.authn import load_users
+
+    fixture = tmp_path / "users.json"
+    fixture.write_text(
+        json.dumps(
+            [
+                {"user_id": "u1", "api_key": "shared", "role": "agent", "client_ids": ["acme"]},
+                {"user_id": "u2", "api_key": "shared", "role": "admin", "client_ids": ["acme"]},
+            ]
+        )
+    )
+    with pytest.raises(UnauthorizedError):
+        load_users(fixture)
+
+
+def test_production_guard_rejects_dev_defaults():
+    """ENVIRONMENT=production + published dev secrets → startup refuses to boot."""
+    from app.core.config import Settings
+
+    with pytest.raises(RuntimeError, match="unsafe production"):
+        Settings(environment="production").assert_safe_for_production()
+    Settings().assert_safe_for_production()  # development — no-op

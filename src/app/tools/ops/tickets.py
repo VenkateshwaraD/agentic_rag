@@ -114,7 +114,7 @@ class PostgresTicketsStore:
         return OpsResult[TicketRow](
             store=self.store,
             latency_ms=(time.monotonic() - started) * 1000,
-            error=OpsError(code=code, message=type(exc).__name__, detail=str(exc)[:200]),
+            error=OpsError(code=code, message=type(exc).__name__),
         )
 
 

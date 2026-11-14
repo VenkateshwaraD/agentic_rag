@@ -266,3 +266,18 @@ def test_build_entitlements_role_metadata():
         == _build_entitlements("acme", "agreements")["roles"]
     )
     assert _build_entitlements("", "slas")["clients"] == "*"
+
+
+def test_build_entitlements_default_deny_missing_client():
+    """A client-scoped doc without client_id is visible to no one — never wildcard."""
+    assert _build_entitlements("", "agreements")["clients"] == []
+
+
+# --- route client extraction --------------------------------------------------
+
+
+def test_extract_client_id_resolves_known_clients():
+    """Client mentions resolve against the users fixture, not a hardcoded list."""
+    assert route._extract_client_id("what is the wire fee for acme?") == "acme"
+    assert route._extract_client_id("show tickets for GRAINMARK") == "grainmark"
+    assert route._extract_client_id("fee for a client that does not exist") is None

@@ -241,13 +241,27 @@ class VectorStore:
                 r["stale"] = is_expired(r)
         return rows
 
-    def fetch_chunk(self, chunk_id: str, source: str | None = None) -> dict[str, Any] | None:
-        """Point-fetch a single chunk by chunk_id (parent-expansion path)."""
+    def fetch_chunk(
+        self,
+        chunk_id: str,
+        source: str | None = None,
+        acl: ACLFilter | None = None,
+    ) -> dict[str, Any] | None:
+        """Point-fetch a single chunk by chunk_id (parent-expansion path).
+
+        ``acl`` applies the caller's entitlement filter as defense-in-depth:
+        a corrupt ``parent_id`` must not pull a chunk belonging to a client
+        the principal isn't entitled to.
+        """
         sql = f"SELECT {_SELECT} FROM chunks WHERE chunk_id = :cid"
         params: dict[str, Any] = {"cid": chunk_id}
         if source:
             sql += " AND source = :src"
             params["src"] = source
+        if acl:
+            acl_where, acl_params = acl.pg_where()
+            sql += f" AND {acl_where}"
+            params.update(acl_params)
         sql += " LIMIT 1"
         with self._connect() as conn, conn.cursor() as cur:
             order = re.findall(r":(\w+)", sql)

@@ -1,7 +1,7 @@
 [
   {
     "user_id": "u_agent1",
-    "api_key": "dev-key-1",
+    "api_key": "dev-key-agent1",
     "role": "agent",
     "client_ids": [
       "acme",
@@ -12,7 +12,7 @@
   },
   {
     "user_id": "u_agent2",
-    "api_key": "dev-key-1",
+    "api_key": "dev-key-agent2",
     "role": "agent",
     "client_ids": [
       "everfield",
@@ -23,7 +23,7 @@
   },
   {
     "user_id": "u_senior",
-    "api_key": "dev-key-2",
+    "api_key": "dev-key-senior",
     "role": "senior_agent",
     "client_ids": [
       "acme",
@@ -42,7 +42,7 @@
   },
   {
     "user_id": "u_admin",
-    "api_key": "dev-key-2",
+    "api_key": "dev-key-admin",
     "role": "admin",
     "client_ids": [
       "acme",

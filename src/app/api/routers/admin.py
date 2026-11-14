@@ -82,9 +82,9 @@ def ingest_dlq_retry(path: str):
     from app.data.ingest.pipeline import ingest_document
     from app.retrieval.indexing import _collection_dirs
 
-    p = Path(path)
+    p = Path(path).resolve()
     coll = next(
-        (c for root, c in _collection_dirs(get_settings()) if str(p).startswith(str(root))),
+        (c for root, c in _collection_dirs(get_settings()) if p.is_relative_to(root.resolve())),
         None,
     )
     if coll is None:

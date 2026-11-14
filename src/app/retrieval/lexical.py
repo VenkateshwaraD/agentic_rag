@@ -190,14 +190,30 @@ class LexicalStore:
             deleted += int(resp.get("deleted", 0))
         return deleted
 
-    def fetch_chunk(self, chunk_id: str, collection: str | None = None) -> dict[str, Any] | None:
-        """Point-fetch a chunk by chunk_id (parent-expansion path)."""
+    def fetch_chunk(
+        self,
+        chunk_id: str,
+        collection: str | None = None,
+        acl: ACLFilter | None = None,
+    ) -> dict[str, Any] | None:
+        """Point-fetch a chunk by chunk_id (parent-expansion path).
+
+        ``acl`` applies the caller's entitlement filter as defense-in-depth:
+        a corrupt ``parent_id`` must not pull a chunk belonging to a client
+        the principal isn't entitled to.
+        """
+        filters = [acl.os_filter()] if acl else []
         for name in [self.index_name(collection)] if collection else self._all_collection_indexes():
             if not self._client.indices.exists(index=name):
                 continue
             resp = self._client.search(
                 index=name,
-                body={"size": 1, "query": {"term": {"chunk_id": chunk_id}}},
+                body={
+                    "size": 1,
+                    "query": {
+                        "bool": {"must": [{"term": {"chunk_id": chunk_id}}], "filter": filters}
+                    },
+                },
             )
             hits = resp["hits"]["hits"]
             if hits:

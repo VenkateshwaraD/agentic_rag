@@ -118,6 +118,33 @@ def _ops_filters(question: str, ops: list[str]) -> dict:
     return out
 
 
+def _known_clients() -> frozenset[str]:
+    """Every client id the deployment knows — the union of entitlements in
+    the users fixture. Tenant names are data, not code: a hardcoded list
+    silently stops recognizing clients the fixture later gains.
+    """
+    from app.security.authn import load_users
+
+    try:
+        users = load_users(get_settings().users_file)
+    except Exception:
+        return frozenset()
+    return frozenset(cid for u in users.values() for cid in u.get("client_ids", ()))
+
+
+def _extract_client_id(question: str) -> str | None:
+    """Return the first *known* client id mentioned in the question.
+
+    Words are matched positionally so the leftmost mention wins; unknown
+    names return None rather than a partial guess.
+    """
+    known = _known_clients()
+    for word in re.findall(r"[a-z][a-z0-9]+", question.lower()):
+        if word in known:
+            return word
+    return None
+
+
 def _heuristic_route(question: str) -> dict:
     """Classify sources/ops tools by keyword matching (offline fallback).
 
@@ -127,15 +154,7 @@ def _heuristic_route(question: str) -> dict:
     q = question.lower()
     sources = [c for c, kws in _KEYWORDS.items() if any(k in q for k in kws)]
     ops = [o for o, kws in _OPS_KEYWORDS.items() if any(k in q for k in kws)]
-    cid = None
-    m = re.search(
-        r"\b(acme|bluepeak|crestline|deltaworks|everfield|foxglove|"
-        r"grainmark|harborline|ironvale|junipersky|kestrelbay|"
-        r"latticepoint)\b",
-        q,
-    )
-    if m:
-        cid = m.group(1)
+    cid = _extract_client_id(q)
     return {"sources": sources or ALL_SOURCES, "ops": ops, "client_id": cid}
 
 

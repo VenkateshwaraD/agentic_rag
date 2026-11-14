@@ -43,7 +43,7 @@ cp .env.example .env
 
 **Rule:** a user's entry in `USERS_FILE` (`key` field) must also appear
 in `API_KEYS` — both checks happen in `security/authn.py`. Dev fixture:
-`dev-key-1` for agents, `dev-key-2` for senior/admin.
+one key per user — `dev-key-agent1`, `dev-key-agent2`, `dev-key-senior`, `dev-key-admin` (shared keys are rejected).
 
 **Production:** do not put secrets in `.env` or manifests — prod k8s uses
 `ExternalSecret` (AWS Secrets Manager); see `deploy/README.md`.
@@ -85,7 +85,7 @@ copilot ask "What is the wire fee for acme?" --user u_agent1
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/answer \
-  -H "X-API-Key: dev-key-1" -H "X-User-Id: u_agent1" \
+  -H "X-API-Key: dev-key-agent1" -H "X-User-Id: u_agent1" \
   -H "Content-Type: application/json" \
   -d '{"question": "Show open tickets for acme"}'
 

@@ -96,7 +96,7 @@ def retrieve(state):
                     {**state, "errors": updates.get("errors", [])},
                     f"retrieve.{coll}_failed: {exc}",
                 )
-                diagnostics[coll] = {"error": "store_unavailable", "detail": str(exc)[:200]}
+                diagnostics[coll] = {"error": "store_unavailable", "detail": type(exc).__name__}
                 continue
             for r in out["results"]:
                 r["collection"] = coll
@@ -138,7 +138,7 @@ def retrieve(state):
                         "tool": tool,
                         "client_id": client_id,
                         "rows": [],
-                        "error": {"code": "store_unavailable", "detail": str(exc)[:200]},
+                        "error": {"code": "store_unavailable", "detail": type(exc).__name__},
                     }
             audit(
                 state,

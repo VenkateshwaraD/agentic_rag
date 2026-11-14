@@ -421,28 +421,30 @@ def generate() -> dict:
 
     (syn / "facts.json").write_text(json.dumps(facts, indent=2))
 
+    # one key per user — a shared key would let its holder impersonate any
+    # record carrying it (authn.load_users refuses such fixtures outright)
     users = [
         {
             "user_id": "u_agent1",
-            "api_key": "dev-key-1",
+            "api_key": "dev-key-agent1",
             "role": "agent",
             "client_ids": ["acme", "bluepeak", "crestline", "deltaworks"],
         },
         {
             "user_id": "u_agent2",
-            "api_key": "dev-key-1",
+            "api_key": "dev-key-agent2",
             "role": "agent",
             "client_ids": ["everfield", "foxglove", "grainmark", "harborline"],
         },
         {
             "user_id": "u_senior",
-            "api_key": "dev-key-2",
+            "api_key": "dev-key-senior",
             "role": "senior_agent",
             "client_ids": [c[0] for c in CLIENTS],
         },
         {
             "user_id": "u_admin",
-            "api_key": "dev-key-2",
+            "api_key": "dev-key-admin",
             "role": "admin",
             "client_ids": [c[0] for c in CLIENTS],
         },

@@ -20,9 +20,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from app.core.constants import ROLE_ADMIN, ROLE_AGENT, ROLE_SENIOR_AGENT
+from app.core.constants import (
+    COLLECTION_AGREEMENTS,
+    ROLE_ADMIN,
+    ROLE_AGENT,
+    ROLE_SENIOR_AGENT,
+)
 
 ALL_ROLES = [ROLE_AGENT, ROLE_SENIOR_AGENT, ROLE_ADMIN]
+
+# Collections whose docs are tenant-owned: a missing client_id here is a
+# mislabeled doc that must default-deny, never wildcard-publish.
+_CLIENT_SCOPED_COLLECTIONS = frozenset({COLLECTION_AGREEMENTS})
 
 _META_RE = re.compile(r"<!--\s*doc_id:\s*([A-Z0-9-]+)\s*(.*?)\s*-->", re.DOTALL)
 _COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
@@ -149,11 +158,21 @@ def _build_entitlements(client_id: str, source: str, roles: str = "") -> dict:
     """Client-scoped docs (agreements) restrict to the owning client;
     bank-wide docs (SLAs, service teams) are visible to all entitled clients.
 
+    Default-deny: a client-scoped doc with **no** ``client_id`` is a
+    mislabeled tenant document — wildcard it and it leaks cross-tenant —
+    so it gets an empty allowlist (visible to no one) until fixed. Only
+    bank-wide collections may publish ``clients: "*"``.
+
     ``roles`` is an optional comma-separated allowlist from document
     metadata (``roles: senior_agent,admin`` in the header comment) — valid
     role names only; empty means the default ALL_ROLES visibility.
     """
-    clients = [client_id] if client_id else "*"
+    if client_id:
+        clients: list | str = [client_id]
+    elif source in _CLIENT_SCOPED_COLLECTIONS:
+        clients = []
+    else:
+        clients = "*"
     parsed = [r.strip() for r in roles.split(",") if r.strip() in ALL_ROLES]
     return {"clients": clients, "roles": parsed or ALL_ROLES}
 

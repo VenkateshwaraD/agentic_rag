@@ -14,6 +14,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.api.routers import admin, answer, audit, health
+from app.core.config import get_settings
 from app.core.errors import AppError, ForbiddenError, NotFoundError, UnauthorizedError
 from app.core.logging import configure_logging, get_logger
 from app.observability.middleware import RequestContextMiddleware
@@ -31,6 +32,7 @@ _STATUS = {
 async def lifespan(app: FastAPI):
     """Startup: configure logging and ensure the audit table exists (best-effort)."""
     configure_logging()
+    get_settings().assert_safe_for_production()
     try:
         from app.core.dependencies import get_audit
 

@@ -10,6 +10,7 @@ Author: venkateshwara doijode
 """
 
 from collections import defaultdict
+from pathlib import Path
 
 
 def _recall(actual_ids: list, required: set) -> float:
@@ -243,6 +244,15 @@ def ragas_metrics(samples: list[dict], cfg=None) -> dict:
         return {"ragas_error": str(exc)}
 
 
+def _rel_dataset_path(dataset_path) -> str:
+    """Repo-relative dataset path — committed reports must not leak the
+    runner's absolute filesystem layout (username, checkout location)."""
+    try:
+        return str(Path(dataset_path).resolve().relative_to(Path(__file__).resolve().parents[1]))
+    except ValueError:
+        return Path(dataset_path).name
+
+
 def version_snapshot(dataset_path, rows: int) -> dict:
     """Capture model/prompt/embedding/index/dataset versions for the report.
 
@@ -286,7 +296,7 @@ def version_snapshot(dataset_path, rows: int) -> dict:
         },
         "prompts": prompt_hashes,
         "dataset": {
-            "path": str(dataset_path),
+            "path": _rel_dataset_path(dataset_path),
             "rows": rows,
             "sha256": hashlib.sha256(data).hexdigest()[:16] if data else "",
         },

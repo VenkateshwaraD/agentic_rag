@@ -41,8 +41,13 @@ class Settings(BaseSettings):
     ops_admin_database_url: str = "postgresql://rag:rag@localhost:5432/opsdb"
     opensearch_url: str = "http://localhost:9200"
 
+    # --- Environment ---
+    # development | staging | production — production refuses to boot on
+    # published dev fixtures (see assert_safe_for_production)
+    environment: str = "development"
+
     # --- Auth (prototype) ---
-    api_keys: str = "dev-key-1,dev-key-2"  # dev fixture keys (db/seed/users.json)
+    api_keys: str = "dev-key-agent1,dev-key-agent2,dev-key-senior,dev-key-admin"  # dev fixture keys (db/seed/users.json)
     users_file: Path = PROJECT_ROOT / "db" / "seed" / "users.json"
     admin_token: str = "admin-dev-token"
 
@@ -113,6 +118,40 @@ class Settings(BaseSettings):
     def langfuse_enabled(self) -> bool:
         """Return True only when both Langfuse keys are set, enabling tracing."""
         return bool(self.langfuse_public_key and self.langfuse_secret_key)
+
+    @property
+    def is_production(self) -> bool:
+        """True when ``environment`` declares production."""
+        return self.environment.strip().lower() == "production"
+
+    def assert_safe_for_production(self) -> None:
+        """Refuse to boot a production deploy still holding published dev fixtures.
+
+        Development defaults exist so ``make dev-up`` works with zero config —
+        but a prod deploy that forgets to set secrets would otherwise answer
+        admin requests with ``admin-dev-token``. Checked once at API startup.
+        """
+        if not self.is_production:
+            return
+        problems = [
+            "ADMIN_TOKEN is the published dev default"
+            if self.admin_token == "admin-dev-token"
+            else "",
+            "API_KEYS contains published dev fixture keys"
+            if any(k.startswith("dev-key-") for k in self.valid_api_keys)
+            else "",
+            "DATABASE_URL uses the published dev credential"
+            if "rag:rag@" in self.database_url
+            else "",
+            "OPS_DATABASE_URL uses the published dev credential"
+            if "readonly:readonly@" in self.ops_database_url
+            else "",
+            "USERS_FILE points at the committed dev fixture"
+            if self.users_file == PROJECT_ROOT / "db" / "seed" / "users.json"
+            else "",
+        ]
+        if problems := [p for p in problems if p]:
+            raise RuntimeError("unsafe production configuration: " + "; ".join(problems))
 
 
 @lru_cache

@@ -132,7 +132,7 @@ class HybridRetriever:
             reranked = candidates
 
         results = reranked[: self._s.final_top_k]
-        parent_expanded = self._expand_parents(results)
+        parent_expanded = self._expand_parents(results, acl)
         for r in results:
             if is_expired(r):
                 r["stale"] = True
@@ -160,7 +160,7 @@ class HybridRetriever:
             },
         }
 
-    def _expand_parents(self, results: list[dict]) -> int:
+    def _expand_parents(self, results: list[dict], acl=None) -> int:
         """Attach parent-section text to child hits when parent-child is enabled.
 
         Long agreements index paragraph children under section parents;
@@ -175,7 +175,7 @@ class HybridRetriever:
             if not parent_id:
                 continue
             try:
-                parent = self._vectors.fetch_chunk(parent_id)
+                parent = self._vectors.fetch_chunk(parent_id, acl=acl)
             except Exception as exc:
                 log.warning("hybrid.parent_fetch_failed", parent_id=parent_id, error=str(exc)[:200])
                 continue

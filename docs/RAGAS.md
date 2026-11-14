@@ -327,7 +327,7 @@ scores were low. To go deeper:
 
   ```bash
   curl -X POST http://localhost:8090/api/v1/answer \
-    -H "X-API-Key: dev-key-1" -H "X-User-Id: u_agent1" \
+    -H "X-API-Key: dev-key-agent1" -H "X-User-Id: u_agent1" \
     -H "Content-Type: application/json" \
     -d '{"question": "<the failing question>"}'
   ```
