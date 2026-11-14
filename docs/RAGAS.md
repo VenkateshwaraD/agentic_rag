@@ -237,6 +237,14 @@ python3 eval/runner.py --suite holdout --fail-on-thresholds
 # use different config files
 python3 eval/runner.py --suite dev --ragas-config eval/ragas-experimental.yaml
 python3 eval/runner.py --suite dev --gates eval/gates-strict.yaml
+
+# baseline comparison — run the suite through every answer system and
+# write a side-by-side delta report (eval/reports/compare_*.md)
+python3 eval/runner.py --suite dev --system all --no-ragas
+
+# or one system at a time, then merge any reports by hand
+python3 eval/runner.py --suite dev --system plain --no-ragas
+python3 eval/compare.py eval/reports/eval_*.json eval/reports/eval_plain_*.json
 ```
 
 What you'll see: progress logs per question, then a path to the report,
@@ -324,7 +332,58 @@ scores were low. To go deeper:
     -d '{"question": "<the failing question>"}'
   ```
 
-## 8. FAQ (the questions managers actually ask)
+## 8. Baseline comparison — is the agentic layer worth it?
+
+Every claim in this guide invites a fair question: *wouldn't plain RAG —
+retrieve some chunks, ask the model — do just as well?* The project ships
+a baseline to answer that with evidence instead of opinion.
+
+`src/app/baseline.py` is deliberately naive: **no routing, no tools, no
+grading, no validation, no guardrails, no answerability** — it searches
+every collection like one merged index, drafts once, and always claims
+`fully_answerable`. Same corpus, same stores, same embedding model, same
+draft machinery as the agentic pipeline — so any score difference is
+attributable to the agent loop, not to a better retriever or model.
+
+To keep the comparison honest it comes in two variants on each axis:
+
+| variant | retrieval | ACL pre-filter | what it measures |
+|---|---|---|---|
+| `plain` | dense top-5 | **none** (leaks — like real naive RAG) | the realistic naive system |
+| `plain-acl` | dense top-5 | yes | naive RAG + security |
+| `plain-hybrid` | hybrid + rerank | none | same retrieval, no agent loop |
+| `plain-hybrid-acl` | hybrid + rerank | yes | everything *but* the agent loop |
+
+`plain-hybrid-acl` is the strictest control: identical retrieval and
+enforcement — whatever `agentic` still beats it on is provably the agent
+machinery (answerability verdicts, abstention, validation, conflict
+surfacing, guardrails).
+
+```bash
+# run the suite through all 5 systems + write the comparison report
+python3 eval/runner.py --suite dev --system all --no-ragas
+
+# → eval/reports/compare_<ts>.md — side-by-side metric table,
+#   deltas vs the reference (first) system, and per-category
+#   breakdowns for the "gap" metrics (refusals, answerability,
+#   key points, ACL, banned content)
+```
+
+**Where the delta shows — and where it shouldn't.** On easy factual
+questions the baseline ties or nearly ties (retrieval recall is already
+~1.0) — that's expected and honest; the agentic layer isn't magic on
+easy asks. The gap lives in the categories the scenario suites now
+deliberately weight: *conflicting* (baseline picks one doc and asserts
+it confidently — the agentic system flags the disagreement with values),
+*ambiguous*, *unanswerable* (baseline hallucinates from weak matches —
+including leaking *other clients'* documents when ACL is off), and
+*adversarial* (baseline echoes the planted `PWNED` instruction — no
+output guardrail). Expired-agreement questions (everfield, acme,
+ironvale — all `expiry_date: 2024-06-01`) are the cleanest demo: the
+agentic system abstains; the baseline answers confidently from someone
+else's contract.
+
+## 9. FAQ (the questions managers actually ask)
 
 **How much does it cost?** Judge calls are LLM calls — roughly one per
 metric per question. A 22-question suite × 5 metrics ≈ 110 small calls.
@@ -348,7 +407,7 @@ deliberately hard cases — ambiguous questions, conflicting documents,
 denied access. Some misses are expected while the system matures; the
 trend matters more than the point value.
 
-## 9. Glossary
+## 10. Glossary
 
 | Term | Meaning |
 |---|---|
@@ -361,7 +420,7 @@ trend matters more than the point value.
 | **PII** | personally identifiable information — names, emails, phones |
 | **Release gate** | an automatic pass/fail check that can block a release |
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 | Symptom | Likely cause |
 |---|---|

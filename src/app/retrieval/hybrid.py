@@ -88,7 +88,7 @@ class HybridRetriever:
         self,
         query: str,
         collection: str,
-        acl: ACLFilter,
+        acl: ACLFilter | None,
         focus_client: str | None = None,
         strategy: str | None = None,
     ) -> dict[str, Any]:

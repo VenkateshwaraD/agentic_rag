@@ -202,7 +202,7 @@ class VectorStore:
         self,
         query_vec: list[float],
         source: str,
-        acl: ACLFilter,
+        acl: ACLFilter | None,
         top_k: int,
         focus_client: str | None = None,
     ) -> list[dict[str, Any]]:
@@ -211,8 +211,10 @@ class VectorStore:
         Translates named params to positional for psycopg and returns the
         top-k rows as dicts including the similarity score and full chunk
         metadata (version, dates, page, chunk_id, parent_id).
+        ``acl=None`` disables entitlement filtering — used only by the
+        plain-RAG baseline to measure the value of enforcement.
         """
-        where, params = acl.pg_where(focus_client)
+        where, params = acl.pg_where(focus_client) if acl else ("TRUE", {})
         fresh_where, fresh_params = pg_freshness_where(self._expiry_mode)
         params.update(fresh_params)
         params["src"] = source

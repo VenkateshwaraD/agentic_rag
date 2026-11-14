@@ -254,6 +254,12 @@ sequenceDiagram
 - **Reports**: `eval/reports/eval_<ts>.{json,md}` with `version_snapshot`
   (model, embedder, prompt hashes, dataset hash, git SHA) so any two runs
   are comparable; `--repeat N` adds variance ± 95% CI.
+- **Baseline comparison**: `src/app/baseline.py` is the plain-RAG control —
+  same stores/model but no routing, tools, grading, validation, guardrails,
+  or ACL (unless `*-acl` variant). `--system all` runs every variant and
+  `eval/compare.py` writes `compare_<ts>.md` — the side-by-side table that
+  shows what the agent loop actually earns (the gap lives in conflicting/
+  ambiguous/unanswerable/adversarial rows, not easy factual ones).
 
 ## 8. Deployment shape
 

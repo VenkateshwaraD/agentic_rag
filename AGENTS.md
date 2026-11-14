@@ -40,6 +40,8 @@ copilot index [--rebuild] # staged ingestion (incremental unless --rebuild)
 copilot docs list|delete|verify|index-info
 copilot jobs list|dlq   # ingestion job status + dead letters
 copilot eval run --suite pr|dev|holdout|golden [--repeat N --fail-on-leak --fail-on-thresholds]
+python eval/runner.py --suite dev --system all  # agentic vs plain-RAG baselines
+python eval/compare.py eval/reports/*.json     # merge reports → compare_*.md
 python eval/redaction_eval.py  # PII redaction precision/recall harness
 ```
 

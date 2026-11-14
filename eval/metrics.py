@@ -123,20 +123,27 @@ def answerability_metric(output: dict, row: dict) -> float:
 
 def claim_support_metrics(output: dict) -> dict:
     """Derive citation correctness/completeness + unsupported-claim rate
-    from the validate node's claim-level record (1.0 when no validation ran)."""
+    from the validate node's claim-level record (n/a when no validation ran —
+    a system without claim checking gets no credit here, not a perfect score)."""
     v = output.get("validation") or {}
+    if not v:
+        return {
+            "citation_correctness": None,
+            "citation_completeness": None,
+            "unsupported_claim_rate": None,
+        }
     claims = v.get("claims", [])
     citations = output.get("citations", [])
     invalid = len(v.get("invalid_citations", []))
     return {
         "citation_correctness": (
-            1.0 - invalid / max(len(citations), 1) if citations or invalid else 1.0
+            1.0 - invalid / max(len(citations), 1) if citations or invalid else None
         ),
         "citation_completeness": (
-            sum(1 for c in claims if c.get("cited")) / len(claims) if claims else 1.0
+            sum(1 for c in claims if c.get("cited")) / len(claims) if claims else None
         ),
         "unsupported_claim_rate": (
-            len(v.get("unsupported_claims", [])) / len(claims) if claims else 0.0
+            len(v.get("unsupported_claims", [])) / len(claims) if claims else None
         ),
     }
 

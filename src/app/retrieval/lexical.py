@@ -132,9 +132,9 @@ class LexicalStore:
         ok, _ = helpers.bulk(self._client, actions, refresh=True)
         return ok
 
-    def _filters(self, acl: ACLFilter, focus_client: str | None) -> list[dict]:
+    def _filters(self, acl: ACLFilter | None, focus_client: str | None) -> list[dict]:
         """Assemble the query-time filter list: ACL clause + freshness clause."""
-        filters = [acl.os_filter(focus_client)]
+        filters = [acl.os_filter(focus_client)] if acl else []
         fresh = os_freshness_filter(self._expiry_mode)
         if fresh:
             filters.append(fresh)
@@ -153,7 +153,7 @@ class LexicalStore:
         self,
         query: str,
         collection: str,
-        acl: ACLFilter,
+        acl: ACLFilter | None,
         top_k: int,
         focus_client: str | None = None,
     ) -> list[dict[str, Any]]:

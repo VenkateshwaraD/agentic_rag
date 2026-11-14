@@ -36,6 +36,18 @@ SUITES = {
     "holdout": SCENARIOS / "holdout.jsonl",
 }
 
+# Answer systems under test. ``agentic`` is the full LangGraph pipeline;
+# the ``plain-*`` entries are the naive retrieve-then-answer baseline in
+# src/app/baseline.py — (retrieval strategy, ACL pre-filter) variants so
+# the comparison can isolate the agent-loop delta from retrieval/ACL.
+SYSTEMS: dict[str, tuple[str, bool] | None] = {
+    "agentic": None,
+    "plain": ("dense", False),
+    "plain-acl": ("dense", True),
+    "plain-hybrid": ("hybrid_rerank", False),
+    "plain-hybrid-acl": ("hybrid_rerank", True),
+}
+
 
 def _load_rows(path: Path) -> list[dict]:
     """Parse a JSONL scenario file into a list of question rows."""
@@ -48,8 +60,9 @@ def _score_rows(
     entitlements: dict,
     run_ragas: bool,
     ragas_cfg: RC.RagasConfig | None = None,
+    system: str = "agentic",
 ) -> dict:
-    """Run every row through the graph once and compute per-row + aggregate metrics."""
+    """Run every row through the chosen answer system and compute metrics."""
     from app.agent.graph import answer
     from app.core.logging import get_logger
     from app.security.authn import authenticate
@@ -58,9 +71,20 @@ def _score_rows(
     per_row, ragas_samples = [], []
     for row in rows:
         principal = authenticate(users[row["user_id"]]["api_key"], row["user_id"])
-        output = answer(
-            row["question"], principal, request_id=f"eval-{row['id']}-{uuid.uuid4().hex[:6]}"
-        )
+        request_id = f"eval-{row['id']}-{uuid.uuid4().hex[:6]}"
+        if system == "agentic":
+            output = answer(row["question"], principal, request_id=request_id)
+        else:
+            from app.baseline import plain_answer
+
+            strategy, use_acl = SYSTEMS[system]
+            output = plain_answer(
+                row["question"],
+                principal,
+                request_id=request_id,
+                strategy=strategy,
+                use_acl=use_acl,
+            )
         m = {
             **M.citation_metrics(output, row),
             **M.retrieval_metrics(output, row),
@@ -104,12 +128,14 @@ def run_eval(
     ragas_config_path: Path | None = None,
     fail_on_thresholds: bool = False,
     gates_path: Path | None = None,
+    system: str = "agentic",
 ) -> Path:
     """Execute the suite (optionally N times) and write a dated report.
 
     Returns the JSON report path; raises SystemExit(1) on ACL leakage when
     ``fail_on_leak`` is set, or when any configured Ragas threshold is
-    missed under ``fail_on_thresholds``.
+    missed under ``fail_on_thresholds``. ``system`` selects the answer
+    pipeline — ``agentic`` (default) or a ``plain-*`` baseline variant.
     """
     from app.core.config import get_settings
     from app.core.logging import configure_logging, get_logger
@@ -122,16 +148,26 @@ def run_eval(
 
     if not golden_path and suite not in SUITES:
         raise typer.BadParameter(f"unknown suite {suite!r} — pick {sorted(SUITES)}")
+    if system not in SYSTEMS:
+        raise typer.BadParameter(f"unknown system {system!r} — pick {sorted(SYSTEMS)}")
     dataset_path = golden_path or SUITES[suite]
     users = {u["user_id"]: u for u in json.loads(Path(s.users_file).read_text())}
     entitlements = {uid: set(u["client_ids"]) for uid, u in users.items()}
     rows = _load_rows(dataset_path)[: limit or None]
 
     run_results = [
-        _score_rows(rows, users, entitlements, run_ragas=run_ragas and i == 0, ragas_cfg=ragas_cfg)
+        _score_rows(
+            rows,
+            users,
+            entitlements,
+            run_ragas=run_ragas and i == 0,
+            ragas_cfg=ragas_cfg,
+            system=system,
+        )
         for i in range(repeat)
     ]
     result = run_results[0]
+    result["system"] = system
     result["version_snapshot"] = M.version_snapshot(dataset_path, len(rows))
     result["version_snapshot"]["judge_model"] = ragas_cfg.model or s.anthropic_model
     if repeat > 1:
@@ -142,10 +178,11 @@ def run_eval(
     gates = RC.load_gates(gates_path)
     if gates:
         result["gate_checks"] = RC.threshold_checks(result["summary"], gates, prefix="")
-    report_path = write_report(result)
+    report_path = write_report(result, tag=None if system == "agentic" else system)
     log.info(
         "eval.done",
         suite=suite,
+        system=system,
         rows=len(rows),
         repeats=repeat,
         acl_leaks=result.get("acl_leaks", 0),
@@ -176,13 +213,41 @@ def main(
     ragas_config: Path | None = None,
     fail_on_thresholds: bool = False,
     gates: Path | None = None,
+    system: str = "agentic",
 ):
     """Run an eval suite and write the report (prints the JSON report path).
 
     CLI: ``--suite pr|dev|holdout|golden --limit N --repeat N
     --fail-on-leak --no-ragas --ragas-config eval/ragas.yaml
-    --gates eval/gates.yaml --fail-on-thresholds``.
+    --gates eval/gates.yaml --fail-on-thresholds
+    --system agentic|plain|plain-acl|plain-hybrid|plain-hybrid-acl|all``.
+
+    ``--system all`` runs every variant, writes one tagged report each,
+    then writes a side-by-side comparison report via eval/compare.py.
     """
+    if system == "all":
+        # Gate enforcement applies to the agentic run only: no-ACL baseline
+        # variants leak *by design* (the leak count is the comparison's
+        # result, not a failure) and must not abort the loop mid-run.
+        paths = [
+            run_eval(
+                suite,
+                golden,
+                limit or None,
+                repeat,
+                fail_on_leak and name == "agentic",
+                ragas,
+                ragas_config,
+                fail_on_thresholds and name == "agentic",
+                gates,
+                system=name,
+            )
+            for name in SYSTEMS
+        ]
+        import compare
+
+        print(compare.main_compare(paths))
+        return
     print(
         run_eval(
             suite,
@@ -194,6 +259,7 @@ def main(
             ragas_config,
             fail_on_thresholds,
             gates,
+            system=system,
         )
     )
 

@@ -10,20 +10,24 @@ from pathlib import Path
 REPORTS_DIR = Path(__file__).resolve().parent / "reports"
 
 
-def write_report(result: dict) -> Path:
+def write_report(result: dict, tag: str | None = None) -> Path:
     """Write the eval result as timestamped JSON + Markdown files.
 
     The Markdown file contains summary, per-category, and failure tables.
-    Returns the JSON report path.
+    ``tag`` prefixes the filename (e.g. ``eval_plain_20260101_120000.json``)
+    for non-agentic system runs; the default agentic suite keeps the
+    legacy untagged name. Returns the JSON report path.
     """
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
-    json_path = REPORTS_DIR / f"eval_{ts}.json"
-    md_path = REPORTS_DIR / f"eval_{ts}.md"
+    name = f"eval_{tag + '_' if tag else ''}{ts}"
+    json_path = REPORTS_DIR / f"{name}.json"
+    md_path = REPORTS_DIR / f"{name}.md"
 
     json_path.write_text(json.dumps(result, indent=2, default=str))
 
     lines = [f"# Eval report — {ts}", ""]
+    lines.append(f"System: {result.get('system', 'agentic')}")
     lines.append(f"Questions: {result.get('n_questions')}")
     lines.append(f"Runs: {result.get('runs', 1)}")
     lines.append(f"ACL leaks (zero tolerance): {result.get('acl_leaks', 0)}")

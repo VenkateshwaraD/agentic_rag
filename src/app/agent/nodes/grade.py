@@ -21,7 +21,7 @@ from app.core.config import get_settings
 from app.core.constants import EV_AGENT_STEP, Answerability, FailureType
 
 _MIN_RERANK_SCORE = -2.0  # BGE logits; negative ~0 is a reasonable relevance bar
-_NUM_RE = re.compile(r"\d+(?:[.,]\d+)*")
+_NUM_RE = re.compile(r"\d+(?:[.,:]\d+)*")
 
 
 def _relevance_ok(r: dict) -> bool:
@@ -62,8 +62,14 @@ def _detect_conflicts(retrieved: list[dict]) -> list[dict]:
                 }
             )
 
-    # same section title in different docs with divergent numerics on
-    # shared "key" phrasing — cheap proxy for contradictory facts
+    # same section title in different docs asserting different numerics on
+    # a shared "key" line — cheap proxy for contradictory facts. A claim
+    # slot is the line text with numbers stripped, so "| Domestic wires |
+    # 15:00 ET |" and "| Domestic wires | 16:00 ET |" map to one slot; when
+    # the number sets in that slot differ across docs the sources conflict.
+    # Version/effective-date boilerplate lines are skipped — a different
+    # amendment date is not a disagreement about the governed fact.
+    _SKIP_KEYS = ("version", "effective", "amend", "entered into")
     by_section: dict[str, list[dict]] = defaultdict(list)
     for r in retrieved:
         key = str(r.get("section", "")).strip().lower()
@@ -73,23 +79,43 @@ def _detect_conflicts(retrieved: list[dict]) -> list[dict]:
         doc_ids = {r.get("doc_id") for r in rows}
         if len(doc_ids) < 2:
             continue
-        nums: dict[str, set[str]] = {}
+        per_doc: dict[str, dict[str, set[str]]] = {}
         for r in rows:
-            nums.setdefault(r["doc_id"], set()).update(_NUM_RE.findall(r.get("text", "")))
-        distinct = set().union(*nums.values()) if nums else set()
-        if len(distinct) > 1 and len(doc_ids) == len(nums):
-            a, b = rows[0], rows[-1]
-            if not (nums[a["doc_id"]] & nums[b["doc_id"]]):
-                conflicts.append(
-                    {
-                        "kind": "numeric_divergence",
-                        "section": section,
-                        "doc_a": a["doc_id"],
-                        "doc_b": b["doc_id"],
-                        "values_a": sorted(nums[a["doc_id"]])[:10],
-                        "values_b": sorted(nums[b["doc_id"]])[:10],
-                    }
-                )
+            claims = per_doc.setdefault(r["doc_id"], defaultdict(set))
+            for line in r.get("text", "").splitlines():
+                nums = _NUM_RE.findall(line)
+                if not nums:
+                    continue
+                key = re.sub(r"\s+", " ", _NUM_RE.sub(" ", line)).strip().lower()[:80]
+                if not key or any(s in key for s in _SKIP_KEYS):
+                    continue
+                claims[key].update(nums)
+        # claim slots populated by 2+ docs whose number sets disagree
+        slots: dict[str, set[str]] = defaultdict(set)
+        for doc, claims in per_doc.items():
+            for key in claims:
+                slots[key].add(doc)
+        for key, docs in slots.items():
+            if len(docs) < 2:
+                continue
+            sets = {d: per_doc[d][key] for d in docs}
+            if len({frozenset(v) for v in sets.values()}) <= 1:
+                continue
+            ordered = sorted(docs)
+            first = ordered[0]
+            other = next(x for x in ordered[1:] if sets[x] != sets[first])
+            conflicts.append(
+                {
+                    "kind": "numeric_divergence",
+                    "section": section,
+                    "doc_a": first,
+                    "doc_b": other,
+                    "field": key,
+                    "values_a": sorted(sets[first])[:10],
+                    "values_b": sorted(sets[other])[:10],
+                }
+            )
+            break  # one divergent slot is enough to flag the section pair
     return conflicts
 
 
@@ -115,7 +141,19 @@ def grade(state):
     missing_tools = sum(1 for tr in tool_results if not tr.get("rows") and not tr.get("error"))
 
     with Timer() as t:
-        conflicts = _detect_conflicts(retrieved)
+        # Conflicts matter among the evidence the question actually bears
+        # on — the tail of a broad retrieval often contains divergent
+        # boilerplate unrelated to the answer (e.g. a ticket question
+        # pulling SLA escalation tables). Score the pool relative to the
+        # best hit: chunks within half the top rerank score participate.
+        pool = retrieved
+        scores = [r["rerank_score"] for r in retrieved if r.get("rerank_score") is not None]
+        if scores:
+            bar = max(scores) * 0.5
+            pool = [
+                r for r in retrieved if r.get("rerank_score") is None or r["rerank_score"] >= bar
+            ]
+        conflicts = _detect_conflicts(pool)
         updates: dict = {"conflicts": conflicts}
 
         if state.get("refusal"):

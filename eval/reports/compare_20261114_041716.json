@@ -1,0 +1,539 @@
+{
+  "systems": [
+    "agentic",
+    "plain",
+    "plain-acl",
+    "plain-hybrid",
+    "plain-hybrid-acl"
+  ],
+  "reference": "agentic",
+  "summary": {
+    "acl_clean": {
+      "agentic": 1.0,
+      "plain": 0.25,
+      "plain-acl": 1.0,
+      "plain-hybrid": 0.25,
+      "plain-hybrid-acl": 1.0
+    },
+    "answerability_correct": {
+      "agentic": 0.8333,
+      "plain": 0.25,
+      "plain-acl": 0.25,
+      "plain-hybrid": 0.25,
+      "plain-hybrid-acl": 0.25
+    },
+    "citation_completeness": {
+      "agentic": 0.9417,
+      "plain": null,
+      "plain-acl": null,
+      "plain-hybrid": null,
+      "plain-hybrid-acl": null
+    },
+    "citation_correctness": {
+      "agentic": 1.0,
+      "plain": null,
+      "plain-acl": null,
+      "plain-hybrid": null,
+      "plain-hybrid-acl": null
+    },
+    "citation_precision": {
+      "agentic": 0.625,
+      "plain": 0.4167,
+      "plain-acl": 0.4167,
+      "plain-hybrid": 0.5,
+      "plain-hybrid-acl": 0.5
+    },
+    "citation_recall": {
+      "agentic": 0.75,
+      "plain": 0.625,
+      "plain-acl": 0.625,
+      "plain-hybrid": 0.75,
+      "plain-hybrid-acl": 0.75
+    },
+    "key_points_hit": {
+      "agentic": 0.8,
+      "plain": 0.7,
+      "plain-acl": 0.7,
+      "plain-hybrid": 0.8,
+      "plain-hybrid-acl": 0.8
+    },
+    "no_banned_content": {
+      "agentic": 1.0,
+      "plain": 1.0,
+      "plain-acl": 1.0,
+      "plain-hybrid": 1.0,
+      "plain-hybrid-acl": 1.0
+    },
+    "recall_bm25": {
+      "agentic": 1.0,
+      "plain": 0.6667,
+      "plain-acl": 0.6667,
+      "plain-hybrid": 0.6667,
+      "plain-hybrid-acl": 0.6667
+    },
+    "recall_dense": {
+      "agentic": 1.0,
+      "plain": 0.6667,
+      "plain-acl": 0.6667,
+      "plain-hybrid": 0.6667,
+      "plain-hybrid-acl": 0.6667
+    },
+    "recall_fused": {
+      "agentic": 1.0,
+      "plain": 0.6667,
+      "plain-acl": 0.6667,
+      "plain-hybrid": 0.6667,
+      "plain-hybrid-acl": 0.6667
+    },
+    "recall_reranked": {
+      "agentic": 1.0,
+      "plain": 0.6667,
+      "plain-acl": 0.6667,
+      "plain-hybrid": 0.6667,
+      "plain-hybrid-acl": 0.6667
+    },
+    "refusal_correct": {
+      "agentic": 1.0,
+      "plain": 0.6667,
+      "plain-acl": 0.6667,
+      "plain-hybrid": 0.6667,
+      "plain-hybrid-acl": 0.6667
+    },
+    "tool_selection": {
+      "agentic": 1.0,
+      "plain": 0.8333,
+      "plain-acl": 0.8333,
+      "plain-hybrid": 0.8333,
+      "plain-hybrid-acl": 0.8333
+    },
+    "unsupported_claim_rate": {
+      "agentic": 0.0312,
+      "plain": null,
+      "plain-acl": null,
+      "plain-hybrid": null,
+      "plain-hybrid-acl": null
+    }
+  },
+  "delta_vs_ref": {
+    "acl_clean": {
+      "agentic": 0.0,
+      "plain": -0.75,
+      "plain-acl": 0.0,
+      "plain-hybrid": -0.75,
+      "plain-hybrid-acl": 0.0
+    },
+    "answerability_correct": {
+      "agentic": 0.0,
+      "plain": -0.5833,
+      "plain-acl": -0.5833,
+      "plain-hybrid": -0.5833,
+      "plain-hybrid-acl": -0.5833
+    },
+    "citation_completeness": {
+      "agentic": 0.0,
+      "plain": null,
+      "plain-acl": null,
+      "plain-hybrid": null,
+      "plain-hybrid-acl": null
+    },
+    "citation_correctness": {
+      "agentic": 0.0,
+      "plain": null,
+      "plain-acl": null,
+      "plain-hybrid": null,
+      "plain-hybrid-acl": null
+    },
+    "citation_precision": {
+      "agentic": 0.0,
+      "plain": -0.2083,
+      "plain-acl": -0.2083,
+      "plain-hybrid": -0.125,
+      "plain-hybrid-acl": -0.125
+    },
+    "citation_recall": {
+      "agentic": 0.0,
+      "plain": -0.125,
+      "plain-acl": -0.125,
+      "plain-hybrid": 0.0,
+      "plain-hybrid-acl": 0.0
+    },
+    "key_points_hit": {
+      "agentic": 0.0,
+      "plain": -0.1,
+      "plain-acl": -0.1,
+      "plain-hybrid": 0.0,
+      "plain-hybrid-acl": 0.0
+    },
+    "no_banned_content": {
+      "agentic": 0.0,
+      "plain": 0.0,
+      "plain-acl": 0.0,
+      "plain-hybrid": 0.0,
+      "plain-hybrid-acl": 0.0
+    },
+    "recall_bm25": {
+      "agentic": 0.0,
+      "plain": -0.3333,
+      "plain-acl": -0.3333,
+      "plain-hybrid": -0.3333,
+      "plain-hybrid-acl": -0.3333
+    },
+    "recall_dense": {
+      "agentic": 0.0,
+      "plain": -0.3333,
+      "plain-acl": -0.3333,
+      "plain-hybrid": -0.3333,
+      "plain-hybrid-acl": -0.3333
+    },
+    "recall_fused": {
+      "agentic": 0.0,
+      "plain": -0.3333,
+      "plain-acl": -0.3333,
+      "plain-hybrid": -0.3333,
+      "plain-hybrid-acl": -0.3333
+    },
+    "recall_reranked": {
+      "agentic": 0.0,
+      "plain": -0.3333,
+      "plain-acl": -0.3333,
+      "plain-hybrid": -0.3333,
+      "plain-hybrid-acl": -0.3333
+    },
+    "refusal_correct": {
+      "agentic": 0.0,
+      "plain": -0.3333,
+      "plain-acl": -0.3333,
+      "plain-hybrid": -0.3333,
+      "plain-hybrid-acl": -0.3333
+    },
+    "tool_selection": {
+      "agentic": 0.0,
+      "plain": -0.1667,
+      "plain-acl": -0.1667,
+      "plain-hybrid": -0.1667,
+      "plain-hybrid-acl": -0.1667
+    },
+    "unsupported_claim_rate": {
+      "agentic": 0.0,
+      "plain": null,
+      "plain-acl": null,
+      "plain-hybrid": null,
+      "plain-hybrid-acl": null
+    }
+  },
+  "by_category": {
+    "answerability_correct": {
+      "adversarial": {
+        "agentic": 1.0,
+        "plain": 0.3333,
+        "plain-acl": 0.3333,
+        "plain-hybrid": 0.3333,
+        "plain-hybrid-acl": 0.3333
+      },
+      "ambiguous": {
+        "agentic": 0.0,
+        "plain": 0.0,
+        "plain-acl": 0.0,
+        "plain-hybrid": 0.0,
+        "plain-hybrid-acl": 0.0
+      },
+      "conflicting_evidence": {
+        "agentic": 1.0,
+        "plain": 0.0,
+        "plain-acl": 0.0,
+        "plain-hybrid": 0.0,
+        "plain-hybrid-acl": 0.0
+      },
+      "doc_factual": {
+        "agentic": 1.0,
+        "plain": 1.0,
+        "plain-acl": 1.0,
+        "plain-hybrid": 1.0,
+        "plain-hybrid-acl": 1.0
+      },
+      "tool_dependent": {
+        "agentic": 1.0,
+        "plain": 1.0,
+        "plain-acl": 1.0,
+        "plain-hybrid": 1.0,
+        "plain-hybrid-acl": 1.0
+      },
+      "unanswerable": {
+        "agentic": 0.5,
+        "plain": 0.0,
+        "plain-acl": 0.0,
+        "plain-hybrid": 0.0,
+        "plain-hybrid-acl": 0.0
+      },
+      "unauthorized": {
+        "agentic": 1.0,
+        "plain": 0.0,
+        "plain-acl": 0.0,
+        "plain-hybrid": 0.0,
+        "plain-hybrid-acl": 0.0
+      }
+    },
+    "refusal_correct": {
+      "adversarial": {
+        "agentic": 1.0,
+        "plain": 0.3333,
+        "plain-acl": 0.3333,
+        "plain-hybrid": 0.3333,
+        "plain-hybrid-acl": 0.3333
+      },
+      "ambiguous": {
+        "agentic": 1.0,
+        "plain": 1.0,
+        "plain-acl": 1.0,
+        "plain-hybrid": 1.0,
+        "plain-hybrid-acl": 1.0
+      },
+      "conflicting_evidence": {
+        "agentic": 1.0,
+        "plain": 1.0,
+        "plain-acl": 1.0,
+        "plain-hybrid": 1.0,
+        "plain-hybrid-acl": 1.0
+      },
+      "doc_factual": {
+        "agentic": 1.0,
+        "plain": 1.0,
+        "plain-acl": 1.0,
+        "plain-hybrid": 1.0,
+        "plain-hybrid-acl": 1.0
+      },
+      "tool_dependent": {
+        "agentic": 1.0,
+        "plain": 1.0,
+        "plain-acl": 1.0,
+        "plain-hybrid": 1.0,
+        "plain-hybrid-acl": 1.0
+      },
+      "unanswerable": {
+        "agentic": 1.0,
+        "plain": 1.0,
+        "plain-acl": 1.0,
+        "plain-hybrid": 1.0,
+        "plain-hybrid-acl": 1.0
+      },
+      "unauthorized": {
+        "agentic": 1.0,
+        "plain": 0.0,
+        "plain-acl": 0.0,
+        "plain-hybrid": 0.0,
+        "plain-hybrid-acl": 0.0
+      }
+    },
+    "key_points_hit": {
+      "adversarial": {
+        "agentic": 1.0,
+        "plain": 1.0,
+        "plain-acl": 1.0,
+        "plain-hybrid": 1.0,
+        "plain-hybrid-acl": 1.0
+      },
+      "ambiguous": {
+        "agentic": null,
+        "plain": null,
+        "plain-acl": null,
+        "plain-hybrid": null,
+        "plain-hybrid-acl": null
+      },
+      "conflicting_evidence": {
+        "agentic": 0.5,
+        "plain": 0.75,
+        "plain-acl": 0.75,
+        "plain-hybrid": 1.0,
+        "plain-hybrid-acl": 1.0
+      },
+      "doc_factual": {
+        "agentic": 1.0,
+        "plain": 1.0,
+        "plain-acl": 1.0,
+        "plain-hybrid": 1.0,
+        "plain-hybrid-acl": 1.0
+      },
+      "tool_dependent": {
+        "agentic": 1.0,
+        "plain": 0.0,
+        "plain-acl": 0.0,
+        "plain-hybrid": 0.0,
+        "plain-hybrid-acl": 0.0
+      },
+      "unanswerable": {
+        "agentic": null,
+        "plain": null,
+        "plain-acl": null,
+        "plain-hybrid": null,
+        "plain-hybrid-acl": null
+      },
+      "unauthorized": {
+        "agentic": null,
+        "plain": null,
+        "plain-acl": null,
+        "plain-hybrid": null,
+        "plain-hybrid-acl": null
+      }
+    },
+    "acl_clean": {
+      "adversarial": {
+        "agentic": 1.0,
+        "plain": 0.3333,
+        "plain-acl": 1.0,
+        "plain-hybrid": 0.3333,
+        "plain-hybrid-acl": 1.0
+      },
+      "ambiguous": {
+        "agentic": 1.0,
+        "plain": 0.0,
+        "plain-acl": 1.0,
+        "plain-hybrid": 0.0,
+        "plain-hybrid-acl": 1.0
+      },
+      "conflicting_evidence": {
+        "agentic": 1.0,
+        "plain": 1.0,
+        "plain-acl": 1.0,
+        "plain-hybrid": 1.0,
+        "plain-hybrid-acl": 1.0
+      },
+      "doc_factual": {
+        "agentic": 1.0,
+        "plain": 0.0,
+        "plain-acl": 1.0,
+        "plain-hybrid": 0.0,
+        "plain-hybrid-acl": 1.0
+      },
+      "tool_dependent": {
+        "agentic": 1.0,
+        "plain": 0.0,
+        "plain-acl": 1.0,
+        "plain-hybrid": 0.0,
+        "plain-hybrid-acl": 1.0
+      },
+      "unanswerable": {
+        "agentic": 1.0,
+        "plain": 0.0,
+        "plain-acl": 1.0,
+        "plain-hybrid": 0.0,
+        "plain-hybrid-acl": 1.0
+      },
+      "unauthorized": {
+        "agentic": 1.0,
+        "plain": 0.0,
+        "plain-acl": 1.0,
+        "plain-hybrid": 0.0,
+        "plain-hybrid-acl": 1.0
+      }
+    },
+    "no_banned_content": {
+      "adversarial": {
+        "agentic": 1.0,
+        "plain": 1.0,
+        "plain-acl": 1.0,
+        "plain-hybrid": 1.0,
+        "plain-hybrid-acl": 1.0
+      },
+      "ambiguous": {
+        "agentic": 1.0,
+        "plain": 1.0,
+        "plain-acl": 1.0,
+        "plain-hybrid": 1.0,
+        "plain-hybrid-acl": 1.0
+      },
+      "conflicting_evidence": {
+        "agentic": 1.0,
+        "plain": 1.0,
+        "plain-acl": 1.0,
+        "plain-hybrid": 1.0,
+        "plain-hybrid-acl": 1.0
+      },
+      "doc_factual": {
+        "agentic": 1.0,
+        "plain": 1.0,
+        "plain-acl": 1.0,
+        "plain-hybrid": 1.0,
+        "plain-hybrid-acl": 1.0
+      },
+      "tool_dependent": {
+        "agentic": 1.0,
+        "plain": 1.0,
+        "plain-acl": 1.0,
+        "plain-hybrid": 1.0,
+        "plain-hybrid-acl": 1.0
+      },
+      "unanswerable": {
+        "agentic": 1.0,
+        "plain": 1.0,
+        "plain-acl": 1.0,
+        "plain-hybrid": 1.0,
+        "plain-hybrid-acl": 1.0
+      },
+      "unauthorized": {
+        "agentic": 1.0,
+        "plain": 1.0,
+        "plain-acl": 1.0,
+        "plain-hybrid": 1.0,
+        "plain-hybrid-acl": 1.0
+      }
+    },
+    "unsupported_claim_rate": {
+      "adversarial": {
+        "agentic": 0.0,
+        "plain": null,
+        "plain-acl": null,
+        "plain-hybrid": null,
+        "plain-hybrid-acl": null
+      },
+      "ambiguous": {
+        "agentic": 0.25,
+        "plain": null,
+        "plain-acl": null,
+        "plain-hybrid": null,
+        "plain-hybrid-acl": null
+      },
+      "conflicting_evidence": {
+        "agentic": 0.0,
+        "plain": null,
+        "plain-acl": null,
+        "plain-hybrid": null,
+        "plain-hybrid-acl": null
+      },
+      "doc_factual": {
+        "agentic": 0.0,
+        "plain": null,
+        "plain-acl": null,
+        "plain-hybrid": null,
+        "plain-hybrid-acl": null
+      },
+      "tool_dependent": {
+        "agentic": 0.0,
+        "plain": null,
+        "plain-acl": null,
+        "plain-hybrid": null,
+        "plain-hybrid-acl": null
+      },
+      "unanswerable": {
+        "agentic": 0.0,
+        "plain": null,
+        "plain-acl": null,
+        "plain-hybrid": null,
+        "plain-hybrid-acl": null
+      },
+      "unauthorized": {
+        "agentic": null,
+        "plain": null,
+        "plain-acl": null,
+        "plain-hybrid": null,
+        "plain-hybrid-acl": null
+      }
+    }
+  },
+  "acl_leaks": {
+    "agentic": 0,
+    "plain": 9,
+    "plain-acl": 0,
+    "plain-hybrid": 9,
+    "plain-hybrid-acl": 0
+  }
+}

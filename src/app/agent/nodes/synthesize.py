@@ -62,6 +62,20 @@ def _offline_draft(state) -> str:
     """Deterministic extractive draft used when no LLM key is configured —
     keeps the pipeline runnable offline. Clearly marked; never used in prod."""
     parts = ["[offline-draft — no LLM configured] Based on the retrieved evidence:"]
+    # surface detected contradictions with the divergent values + a dual
+    # citation — a conflict-aware answer must name what disagrees
+    for c in state.get("conflicts", [])[:2]:
+        if c.get("kind") != "numeric_divergence":
+            continue
+        docs = {r.get("doc_id"): r for r in state.get("retrieved", [])}
+        a, b = docs.get(c["doc_a"], {}), docs.get(c["doc_b"], {})
+        field = re.sub(r"[|]+", " ", c.get("field", "")).strip() or "the same field"
+        parts.append(
+            f"- Sources disagree on {field}: {', '.join(c['values_a'][:3])} "
+            f"versus {', '.join(c['values_b'][:3])} "
+            f"[{c['doc_a']} §{a.get('section', c['section'])}] "
+            f"[{c['doc_b']} §{b.get('section', c['section'])}]"
+        )
     for r in state.get("retrieved", [])[:3]:
         # flatten to one line so the trailing citation marker covers every
         # sentence in the snippet — the validator scopes citations per line
