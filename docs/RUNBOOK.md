@@ -75,6 +75,16 @@ copilot docs verify     # sanity: pgvector ↔ OpenSearch parity check
 
 ## 5. Run the agent
 
+### Local service URLs
+
+| URL | what |
+|---|---|
+| http://localhost:8501 | **Streamlit UI** — chat + eval dashboard (`?page=eval`, `?page=compare` deep-links) |
+| http://localhost:8000 | **API** — `POST /api/v1/answer`, `/answer/stream`, `/health`, `/ready`, `/deps` |
+| http://localhost:8000/docs | **Swagger UI** — interactive API explorer |
+| http://localhost:3000 | **Langfuse** (optional `docker-compose.observability.yml`) — request traces |
+| `localhost:5432` / `localhost:9200` | Postgres (ragdb/opsdb) / OpenSearch |
+
 **CLI** (fastest smoke):
 
 ```bash
