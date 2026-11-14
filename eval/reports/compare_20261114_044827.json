@@ -40,22 +40,22 @@
       "agentic": 0.625,
       "plain": 0.4167,
       "plain-acl": 0.4167,
-      "plain-hybrid": 0.5,
-      "plain-hybrid-acl": 0.5
+      "plain-hybrid": 0.2917,
+      "plain-hybrid-acl": 0.2917
     },
     "citation_recall": {
       "agentic": 0.75,
       "plain": 0.625,
       "plain-acl": 0.625,
-      "plain-hybrid": 0.75,
-      "plain-hybrid-acl": 0.75
+      "plain-hybrid": 0.625,
+      "plain-hybrid-acl": 0.625
     },
     "key_points_hit": {
       "agentic": 0.8,
       "plain": 0.7,
       "plain-acl": 0.7,
-      "plain-hybrid": 0.8,
-      "plain-hybrid-acl": 0.8
+      "plain-hybrid": 0.5,
+      "plain-hybrid-acl": 0.5
     },
     "no_banned_content": {
       "agentic": 1.0,
@@ -147,22 +147,22 @@
       "agentic": 0.0,
       "plain": -0.2083,
       "plain-acl": -0.2083,
-      "plain-hybrid": -0.125,
-      "plain-hybrid-acl": -0.125
+      "plain-hybrid": -0.3333,
+      "plain-hybrid-acl": -0.3333
     },
     "citation_recall": {
       "agentic": 0.0,
       "plain": -0.125,
       "plain-acl": -0.125,
-      "plain-hybrid": 0.0,
-      "plain-hybrid-acl": 0.0
+      "plain-hybrid": -0.125,
+      "plain-hybrid-acl": -0.125
     },
     "key_points_hit": {
       "agentic": 0.0,
       "plain": -0.1,
       "plain-acl": -0.1,
-      "plain-hybrid": 0.0,
-      "plain-hybrid-acl": 0.0
+      "plain-hybrid": -0.3,
+      "plain-hybrid-acl": -0.3
     },
     "no_banned_content": {
       "agentic": 0.0,
@@ -343,8 +343,8 @@
         "agentic": 0.5,
         "plain": 0.75,
         "plain-acl": 0.75,
-        "plain-hybrid": 1.0,
-        "plain-hybrid-acl": 1.0
+        "plain-hybrid": 0.25,
+        "plain-hybrid-acl": 0.25
       },
       "doc_factual": {
         "agentic": 1.0,

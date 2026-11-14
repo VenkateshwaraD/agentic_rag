@@ -91,6 +91,40 @@ def test_plain_answer_top_k_merges_by_score(monkeypatch):
     assert out["retrieved"][0]["score"] >= out["retrieved"][1]["score"]
 
 
+def test_rank_key_prefers_rerank_score(monkeypatch):
+    """Hybrid-rerank merges must rank by reranker verdict, not raw leg score.
+
+    BM25 ``score`` (~5-30) dwarfs cosine (0-1) — sorting by it across
+    collections would bury the reranker's actual ranking.
+    """
+
+    class _Scored:
+        def search(self, query, collection, acl, strategy=None):
+            return {
+                "results": [
+                    {  # BM25-flavoured hit: huge leg score, weak rerank verdict
+                        "doc_id": "DOC-001",
+                        "section": "s",
+                        "text": "lo",
+                        "score": 24.0,
+                        "rerank_score": -3.0,
+                    },
+                    {  # reranker's actual winner despite a tiny cosine score
+                        "doc_id": "DOC-002",
+                        "section": "s",
+                        "text": "hi",
+                        "score": 0.4,
+                        "rerank_score": 2.0,
+                    },
+                ],
+                "diagnostics": {},
+            }
+
+    monkeypatch.setattr(baseline, "get_hybrid", lambda: _Scored())
+    out = baseline.plain_answer("q", _principal(), "r1", strategy="hybrid_rerank", top_k=1)
+    assert out["retrieved"][0]["doc_id"] == "DOC-002"
+
+
 # --- compare.py --------------------------------------------------------------
 
 

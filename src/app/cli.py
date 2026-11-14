@@ -148,21 +148,35 @@ def eval_run(
     repeat: int = typer.Option(1, "--repeat"),
     golden: Path | None = None,
     fail_on_leak: bool = typer.Option(False, "--fail-on-leak"),
+    fail_on_thresholds: bool = typer.Option(False, "--fail-on-thresholds"),
+    system: str = typer.Option("agentic", "--system"),
+    no_ragas: bool = typer.Option(False, "--no-ragas"),
 ):
     """Run an eval suite and write a report.
 
     ``--suite`` picks pr|dev|holdout|golden; ``--golden`` selects an
     explicit JSONL file; ``--repeat`` reruns for variance; ``--fail-on-leak``
-    exits non-zero on any ACL leakage (release gate).
+    exits non-zero on any ACL leakage (release gate); ``--fail-on-thresholds``
+    exits on gates.yaml/Ragas floor breaches; ``--system`` picks the answer
+    pipeline — ``agentic`` or a ``plain-*`` baseline (``all`` runs every
+    variant and writes the comparison report).
     """
     configure_logging()
     import sys
 
     sys.path.insert(0, str(PROJECT_ROOT / "eval"))
-    from runner import run_eval  # noqa: E402
+    from runner import main as runner_main  # noqa: E402
 
-    report = run_eval(suite, golden, limit=limit or None, repeat=repeat, fail_on_leak=fail_on_leak)
-    typer.echo(f"report → {report}")
+    runner_main(
+        suite=suite,
+        golden=golden,
+        limit=limit,
+        repeat=repeat,
+        fail_on_leak=fail_on_leak,
+        ragas=not no_ragas,
+        fail_on_thresholds=fail_on_thresholds,
+        system=system,
+    )
 
 
 # --- document lifecycle ----------------------------------------------------

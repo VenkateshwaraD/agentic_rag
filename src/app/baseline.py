@@ -40,13 +40,26 @@ from app.security.authz import acl_for
 ALL_COLLECTIONS = [COLLECTION_AGREEMENTS, COLLECTION_SLAS, COLLECTION_SERVICE_TEAMS]
 
 
+def _rank_key(r: dict) -> float:
+    """Merge-order score for one retrieved chunk.
+
+    ``rerank_score`` (reranker logit) wins when present — one model scored
+    every candidate so logits are comparable across collections, and the
+    reranker's verdict is the strategy's final ranking. ``score`` is only
+    the fallback: under hybrid strategies it mixes incomparable scales
+    (BM25 ~5-30 vs cosine 0-1) and must not decide ordering.
+    """
+    rerank = r.get("rerank_score")
+    return rerank if rerank is not None else (r.get("score") or 0.0)
+
+
 def _search_all(query: str, acl, strategy: str, top_k: int) -> list[dict]:
     """Query every collection like one merged index; keep the top-k by score.
 
     A naive RAG system has a single index — the baseline reproduces that
     by merging per-collection result lists and keeping the global top-k,
-    ordered by whatever score the strategy produced (cosine similarity
-    for ``dense``, reranker logits for ``hybrid_rerank``).
+    ordered by the strategy's final ranking signal (reranker logits for
+    ``hybrid_rerank``, cosine similarity for ``dense``).
     """
     hybrid = get_hybrid()
     merged: list[dict] = []
@@ -58,7 +71,7 @@ def _search_all(query: str, acl, strategy: str, top_k: int) -> list[dict]:
         for r in out["results"]:
             r["collection"] = coll
         merged.extend(out["results"])
-    merged.sort(key=lambda r: r.get("score") or 0.0, reverse=True)
+    merged.sort(key=_rank_key, reverse=True)
     return merged[:top_k]
 
 
