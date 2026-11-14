@@ -62,7 +62,9 @@ def test_plain_answer_output_shape(monkeypatch):
     ):
         assert key in out
     assert out["refusal"] is False and out["abstained"] is False
-    assert out["answerability"] == "fully_answerable"
+    # no classification machinery → no verdict; the metric scores n/a,
+    # never a constant-label value guaranteed by construction
+    assert out["answerability"] is None
     assert out["tool_calls"] == []
     assert out["retrieved"]  # merged-index behavior: results came back
     # offline draft echoes snippets + [DOC §section] markers → parsed citations

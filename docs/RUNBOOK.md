@@ -165,6 +165,10 @@ python3 eval/redaction_eval.py                                    # PII precisio
 
 # agentic vs plain-RAG baselines (the project's headline comparison)
 python3 eval/runner.py --suite pr --system all                    # → compare_<ts>.md
+
+# measurement-grade comparison — dev suite (30 rows) ×3, all systems.
+# the 12-row PR suite is a gate; quality claims need repeats + variance
+python3 eval/runner.py --suite dev --system all --repeat 3 --no-ragas
 ```
 
 Each report carries a `version_snapshot` (model, embedder, prompt

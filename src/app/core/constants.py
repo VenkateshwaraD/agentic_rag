@@ -30,6 +30,29 @@ EV_ABSTAIN = "abstain"
 # Citation marker format used in prompts and parsed by the eval harness
 CITATION_PATTERN = r"\[([A-Z]{2,4}-\d{3})\s*§([^\]]+)\]"
 
+# words common to most document titles — they carry no identity, so a
+# doc is "named" in a question only when its *distinctive* title words
+# all appear (e.g. {payments, operations} for "Payments Operations SLA")
+TITLE_BOILER = frozenset(
+    {
+        "the",
+        "service",
+        "level",
+        "agreement",
+        "agreements",
+        "sla",
+        "slas",
+        "client",
+        "clients",
+        "services",
+        "bank",
+        "team",
+        "teams",
+        "policy",
+        "faq",
+    }
+)
+
 # User-facing refusal message (single source for synthesize + guardrail_out)
 REFUSAL_MESSAGE = (
     "I don't have enough entitled information to answer that question. "

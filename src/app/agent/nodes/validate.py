@@ -13,16 +13,24 @@ Author: venkateshwara doijode
 """
 
 import re
+from decimal import Decimal, InvalidOperation
 
 from app.agent.nodes.common import Timer, audit
-from app.agent.nodes.synthesize import _sec_key
+from app.agent.nodes.synthesize import _safe_tool_row, _sec_key
 from app.core.constants import ABSTENTION_MESSAGE, EV_AGENT_STEP, Answerability
 
 _SENT_RE = re.compile(r"(?<=[.!?])\s+")
 _NUM_RE = re.compile(r"\d+(?:[.,]\d+)*")
 _WORD_RE = re.compile(r"[A-Za-z]{5,}")
 _CITE_RE = re.compile(r"\[[^\]]*\]")
-_MAX_CLAIMS = 12
+
+# sentence-openers authored by synthesize._caveat_prefix — system meta
+# commentary about the answer, exempt from claim verification in every
+# draft mode (offline *and* LLM, where it's likewise prepended verbatim)
+_CAVEAT_PREFIXES = (
+    "note: the retrieved sources conflict",
+    "note: i could only partially answer",
+)
 
 
 def _claims_with_lines(draft: str) -> list[tuple[str, str]]:
@@ -32,7 +40,17 @@ def _claims_with_lines(draft: str) -> list[tuple[str, str]]:
     differently-cited line can never leak into a claim. The line is kept so
     citations sitting anywhere on the same bullet line count as evidence
     for every claim on it (drafts append the marker mid- or end-of-line).
+
+    ``Note:`` lines are exempt only in offline drafts — there they are
+    template meta-annotations about the answer ("sources conflict…"), not
+    evidence claims. In an LLM draft a ``Note:`` is arbitrary content and
+    must be verified like everything else; no claim count cap either —
+    every extracted claim is checked, so nothing ships unverified.
     """
+    # the marker is a controlled token emitted only by the offline draft
+    # path — ``in`` (not ``startswith``) because ``_caveat_prefix`` can
+    # prepend a conflict/partial 'Note:' *before* the marker line
+    offline = "[offline-draft" in draft
     out: list[tuple[str, str]] = []
     for line in draft.splitlines():
         for sent in _SENT_RE.split(line):
@@ -40,20 +58,46 @@ def _claims_with_lines(draft: str) -> list[tuple[str, str]]:
             if (
                 len(s) > 20
                 and not s.startswith("[offline-draft")
-                and not s.startswith("Note:")
+                # controlled caveat text authored by ``_caveat_prefix`` is
+                # meta-commentary in *every* draft mode — never a claim.
+                # Other 'Note:' lines skip only in offline drafts, where
+                # they're template annotations; an LLM's Note: is verified
+                and not (
+                    s.lower().startswith(_CAVEAT_PREFIXES) or (offline and s.startswith("Note:"))
+                )
                 and not s.endswith(":")
             ):
                 out.append((s, line))
-    return out[:_MAX_CLAIMS]
+    return out
 
 
 def extract_claims(draft: str) -> list[str]:
     """Split the draft into claim sentences for per-claim support checks.
 
-    Headings, bullets, and the offline-draft marker line are skipped; the
-    result is capped so validation stays bounded on verbose answers.
+    Headings, bullets, the offline-draft marker line, and offline meta
+    ``Note:`` annotations are skipped; every remaining claim is returned —
+    validation must cover all of them, not a truncated prefix.
     """
     return [c for c, _ in _claims_with_lines(draft)]
+
+
+def _num_tokens(text: str) -> set:
+    """Numbers in text as bounded tokens compared by *value*.
+
+    Substring matching let a claim's '150' be 'supported' by '$1500' in
+    the passage (and '20' by '2017'). Tokenizing both sides with the same
+    number regex and comparing as Decimals fixes the boundary while still
+    equating '1,500', '1500' and '1500.0'; a token that can't parse falls
+    back to its normalized string so both sides stay comparable.
+    """
+    out = set()
+    for tok in _NUM_RE.findall(text):
+        t = tok.replace(",", "")
+        try:
+            out.add(Decimal(t))
+        except InvalidOperation:
+            out.add(t)
+    return out
 
 
 def _citation_valid(cit: dict, retrieved: list[dict]) -> bool:
@@ -103,10 +147,11 @@ def _claim_supported(claim: str, cited_text: str) -> bool:
     # asserted fact that must appear in the evidence
     claim = _CITE_RE.sub(" ", claim)
     claim = re.sub(r"\b[A-Z]{2,4}-\d{3,}\b", " ", claim)
-    claim_nums = set(_NUM_RE.findall(claim))
+    claim_nums = _num_tokens(claim)
     if claim_nums:
-        # every numeric must be asserted in the cited passage itself
-        return all(n in hay for n in claim_nums)
+        # every numeric must be asserted in the cited passage itself —
+        # as a bounded token, so '15' can't ride on '$1500' or '2015'
+        return claim_nums <= _num_tokens(hay)
     words = {w.lower() for w in _WORD_RE.findall(claim)}
     words -= {"about", "their", "there", "which", "would", "could", "should", "based"}
     if not words:
@@ -130,11 +175,14 @@ def validate(state):
     retrieved = state.get("retrieved", [])
     citations = state.get("citations", [])
     # ops tool rows are evidence too — tool-only claims validate against
-    # them when the claim cites "[<tool> system]"
-    import json as _json
-
+    # them when the claim cites "[<tool> system]". The draft renders rows
+    # via ``_safe_tool_row`` (free-text fields PII-redacted), so validation
+    # must compare the claim against that same surface — raw rows would
+    # never match redacted tokens and redacted ids break the citation.
     tool_text = " ".join(
-        _json.dumps(tr.get("rows", []), default=str) for tr in state.get("tool_results", [])
+        _safe_tool_row(tr["tool"], row)
+        for tr in state.get("tool_results", [])
+        for row in tr.get("rows", [])
     )
 
     with Timer() as t:

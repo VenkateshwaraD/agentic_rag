@@ -102,7 +102,7 @@ marks values that must live in AWS SM, never in ConfigMaps/manifests.
 | `DENSE_TOP_K` / `LEXICAL_TOP_K` | per-leg candidates | `20`/`20` | keep |
 | `RRF_K` / `RRF_*_WEIGHT` | fusion constant/weights | `60`/`1.0`/`1.0` | keep |
 | `RERANK_CANDIDATES` | reranker input size | `20` | keep |
-| `FINAL_TOP_K` | evidence size into synthesis | `5` | keep |
+| `FINAL_TOP_K` | evidence size into synthesis | `8` | keep — `5` cut second-named docs' conflict sections |
 | `RERANKER_MODEL` | cross-encoder | `BAAI/bge-reranker-base` | keep |
 | `RETRIEVAL_STRATEGY` | `dense\|bm25\|hybrid\|hybrid_rerank\|auto` | `hybrid_rerank` | keep |
 | `DOC_EXPIRY_MODE` | `exclude` \| `down_rank` expired docs | `exclude` | keep |
@@ -118,6 +118,8 @@ marks values that must live in AWS SM, never in ConfigMaps/manifests.
 | `AGENT_MAX_ELAPSED_MS` | wall-clock | `60000` | keep |
 | `AGENT_MAX_COST_USD` | soft spend cap | `0.25` | keep |
 | `AGENT_MAX_RETRIES` | rewrite bound | `2` | keep |
+| `GRADE_MIN_RERANK_SCORE` | weak-evidence floor (reranker emits sigmoid probabilities in [0,1]) | `0.2` | keep — recalibrate only if the reranker model changes |
+| `GRADE_RERANK_CONFIDENT` | top-score "clearly relevant" bar | `0.5` | keep — confident hits bypass the anchor-coverage gate; must be well above the ~0.0–0.05 off-topic band |
 
 ### Ops tools
 
@@ -210,11 +212,24 @@ does not revert schema/data changes.
 |---|---|
 | Full re-index | `copilot index --rebuild` — drops and rebuilds both stores |
 | Incremental index | `copilot index` (default) — hash-diff vs `document_registry`; changed docs propagate deletes before re-index |
+| `doc_title` backfill | the column/mapping is added automatically on connect, but **chunks indexed before the field existed carry `''`** — incremental runs do NOT backfill them (file hashes are unchanged), so `--rebuild` once after upgrading; verify both stores with the queries below |
 | Drop-in docs | files under `data/real/<collection>/` picked up alongside synthetic (see `data/real/`) |
 | Job status / failures | `copilot jobs list`, `copilot jobs dlq [--job <id>]`; retry a dead letter via `POST /admin/ingest/dlq/{path}/retry` (admin token) |
 | Schema changes | Alembic under `db/migrations/` (`env.py` reads `DATABASE_URL`); ops schema/seed: `copilot db init` |
 | Backups | RDS automated snapshots + OpenSearch Service snapshots — recovery is a managed-service restore + `copilot index --rebuild` |
 | Audit retention | `audit_events` in ragdb — append-only, no built-in TTL; set an RDS-side retention/archival policy per compliance |
+
+Verifying `doc_title` in both stores after a `--rebuild`:
+
+```bash
+# pgvector — every indexed chunk should carry a title except
+# source formats with no title concept (raw CSV):
+psql "$DATABASE_URL" -c \
+  "SELECT count(*) total, count(NULLIF(doc_title,'')) titled FROM chunks;"
+
+# OpenSearch — doc_title is keyword-mapped and in _source:
+curl -s "$OPENSEARCH_URL/rag_slas/_search?size=1&_source=doc_id,doc_title" | jq '.hits.hits[0]._source'
+```
 
 ## 7. Verify
 
@@ -223,17 +238,27 @@ does not revert schema/data changes.
 2. **Smoke script** — `deploy/scripts/smoke.sh <env>` runs in-cluster probes:
    health, readiness, and an authenticated `POST /api/v1/answer` when
    `SMOKE_API_KEY`/`SMOKE_USER_ID` are set. Runs automatically post-deploy.
-3. **Post-deploy eval** — quality gate before calling it done:
+3. **Post-deploy eval** — two runs, different jobs:
 
    ```bash
+   # GATE — 12-row PR suite; fail the deploy on any ACL leak or
+   # gates.yaml floor miss. This is a regression gate, not a
+   # quality measurement — 12 rows is too small to conclude from.
    python3 eval/runner.py --suite pr --fail-on-leak --fail-on-thresholds
-   # then the baseline control for the record:
-   python3 eval/runner.py --suite pr --system all
+
+   # MEASUREMENT — 30-row dev suite, all 5 systems, 3 repeats
+   # (90 answers per system; report carries per-run variance).
+   python3 eval/runner.py --suite dev --system all --repeat 3 --no-ragas
    ```
 
-   Zero ACL leaks + all `eval/gates.yaml` floors must hold; compare
-   `eval/reports/eval_<ts>.json` `version_snapshot` to the previous run
-   (model, prompt, dataset, git SHA).
+   Zero ACL leaks + all `eval/gates.yaml` floors must hold on the gate;
+   on the measurement run, read `eval/reports/compare_<ts>.md` — the
+   **Δ vs plain-hybrid-acl** block is the headline (identical retrieval +
+   enforcement, no agent loop — any remaining gap is provably the loop).
+   Baselines emit no answerability verdict, so `answerability_correct`
+   shows `n/a` for them by design. Compare `version_snapshot` (model,
+   prompt, dataset, git SHA) against the previous run before trusting
+   deltas across deploys.
 
 ## 8. Monitor and respond
 

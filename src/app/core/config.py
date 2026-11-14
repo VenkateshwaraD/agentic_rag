@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     rrf_dense_weight: float = 1.0
     rrf_bm25_weight: float = 1.0
     rerank_candidates: int = 20
-    final_top_k: int = 5
+    final_top_k: int = 8  # 5 cut second-named docs' relevant sections (conflict pairs need both)
     reranker_model: str = "BAAI/bge-reranker-base"
     # dense | bm25 | hybrid | hybrid_rerank | auto (classifier decides)
     retrieval_strategy: str = "hybrid_rerank"
@@ -78,6 +78,11 @@ class Settings(BaseSettings):
     agent_max_elapsed_ms: int = 60_000  # hard: wall-clock per request
     agent_max_cost_usd: float = 0.25  # soft: estimated LLM spend (best-effort)
     agent_max_retries: int = 2  # bounded rewrite loop
+    # grading thresholds — the reranker emits sigmoid probabilities in
+    # [0,1] (observed bimodal: off-topic ≈ 0.00–0.05, on-topic ≈ 0.8+), not
+    # raw logits; the bars live in config because the scale is model-dependent
+    grade_min_rerank_score: float = 0.2  # floor: below this = weak evidence
+    grade_rerank_confident: float = 0.5  # top score ≥ this = clearly relevant
     llm_timeout_s: int = 30
 
     # --- Ingestion ---

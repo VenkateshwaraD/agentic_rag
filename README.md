@@ -31,10 +31,12 @@ escalates instead of guessing.
 
 ## How it's useful — measurable, not asserted
 
-- **Fewer wrong answers reaching clients:** vs a plain-RAG baseline on the
-  same corpus, `answerability_correct` 0.83 vs 0.25 and
-  `key_points_hit` 0.80 vs 0.50 (`eval/reports/compare_*.md`,
-  Baseline compare page).
+- **Fewer wrong answers reaching clients:** vs `plain-hybrid-acl` — the
+  strictest control (identical retrieval + entitlement enforcement, no
+  agent loop) — `key_points_hit` 0.80 vs 0.50 and `refusal_correct`
+  1.0 vs 0.67 (`eval/reports/compare_*.md`, Baseline compare page).
+  `answerability_correct` is `n/a` for baselines: they emit no verdict
+  to score against, same convention as the claim-support metrics.
 - **Zero tenant leakage:** `acl_clean` 1.0 vs 0.25 for the ungated
   baseline — enforced as a query pre-filter and gated in CI on every PR.
 - **Auditable by default:** every reply carries source citations, every
@@ -53,7 +55,7 @@ Streamlit UI ──► FastAPI /answer ──► authN/Z (user → entitlements)
                        LangGraph agent (Langfuse trace per request)
                         guardrail_in → route →
                          ├─ doc tools  : pgvector dense (Titan/Bedrock) + OpenSearch BM25
-                         │               → RRF → BGE cross-encoder rerank → top-5
+                         │               → RRF → BGE cross-encoder rerank → top-8
                          └─ ops tools  : get_account / search_trades / search_tickets
                                          (rag_readonly role, fixed parameterized queries)
                         grade (rewrite once) → synthesize cited reply → guardrail_out
@@ -63,6 +65,13 @@ ACL is enforced as a **pre-filter** in pgvector (`WHERE`), OpenSearch
 (`filter` clause), and ops SQL params — unauthorized docs never leave the
 store. PII is redacted at ingest (Presidio, irreversible placeholders) and
 re-scanned on the output draft.
+
+**Multi-tenancy.** This is a multi-tenant RAG: every document carries
+document-level permissions (`client_id` scope for tenant-owned docs,
+`"*"` for bank-wide, plus role allowlists), and retrieval is
+permission-aware — the caller's entitlement filter is injected into the
+vector and lexical queries themselves, so cross-tenant chunks are never
+fetched, let alone leaked into context.
 
 ### Tech stack
 
@@ -142,6 +151,10 @@ UI: `make run-ui` → http://localhost:8501 (chat + eval dashboard).
 copilot evalset generate     # bootstrap ~85 questions → eval/golden_set.jsonl
 # → human review pass, then:
 copilot eval run --limit 10  # scores → eval/reports/eval_*.json|md
+
+# system comparison (the headline number) — dev ×3, all 5 systems;
+# the 12-row PR suite is a CI gate, too small for quality conclusions
+python3 eval/runner.py --suite dev --system all --repeat 3 --no-ragas
 ```
 
 Metrics: Ragas (faithfulness, answer_relevancy, context_precision/recall,

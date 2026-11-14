@@ -242,6 +242,12 @@ python3 eval/runner.py --suite dev --gates eval/gates-strict.yaml
 # write a side-by-side delta report (eval/reports/compare_*.md)
 python3 eval/runner.py --suite dev --system all --no-ragas
 
+# measurement-grade run — 30 dev rows × 3 repeats across all systems.
+# A single 12-row PR run is a regression *gate*, not a measurement:
+# repeat runs expose variance and are the only honest basis for
+# "system A beats system B" claims (the report records `runs` + variance)
+python3 eval/runner.py --suite dev --system all --repeat 3 --no-ragas
+
 # or one system at a time, then merge any reports by hand
 python3 eval/runner.py --suite dev --system plain --no-ragas
 python3 eval/compare.py eval/reports/eval_*.json eval/reports/eval_plain_*.json
@@ -261,7 +267,7 @@ Each run writes two files to `eval/reports/`:
 - `eval_<timestamp>.md` — human-readable, open this one
 - `eval_<timestamp>.json` — the same data, machine-readable
 
-A real report (22-question dev suite) looks like this — full image in
+A real report (30-question dev suite) looks like this — full image in
 [appendix A.4](#appendix-a-what-the-running-system-looks-like):
 
 ![eval report](screenshots/eval_report.png)
@@ -340,10 +346,12 @@ a baseline to answer that with evidence instead of opinion.
 
 `src/app/baseline.py` is deliberately naive: **no routing, no tools, no
 grading, no validation, no guardrails, no answerability** — it searches
-every collection like one merged index, drafts once, and always claims
-`fully_answerable`. Same corpus, same stores, same embedding model, same
-draft machinery as the agentic pipeline — so any score difference is
-attributable to the agent loop, not to a better retriever or model.
+every collection like one merged index, drafts once, and emits no
+answerability verdict (`answerability_correct` reports `n/a`, same
+convention as the claim-support metrics — a capability that doesn't
+exist isn't scored). Same corpus, same stores, same embedding model,
+same draft machinery as the agentic pipeline — so any score difference
+is attributable to the agent loop, not to a better retriever or model.
 (Operational how-to — commands, flags, config, report anatomy:
 `docs/BASELINE.md`.)
 
@@ -359,7 +367,9 @@ To keep the comparison honest it comes in two variants on each axis:
 `plain-hybrid-acl` is the strictest control: identical retrieval and
 enforcement — whatever `agentic` still beats it on is provably the agent
 machinery (answerability verdicts, abstention, validation, conflict
-surfacing, guardrails).
+surfacing, guardrails). The comparison report renders a dedicated
+**Δ vs plain-hybrid-acl** block for exactly this reason: it is the
+headline control, not just one of four variants.
 
 ```bash
 # run the suite through all 5 systems + write the comparison report
@@ -459,7 +469,7 @@ citations, retrieved chunks, claim validation, budget, and diagnostics.
 
 ![live answer](screenshots/answer_example.png)
 
-**A.4 — An eval report** (22-row dev suite). Summary table first, then
+**A.4 — An eval report** (30-row dev suite). Summary table first, then
 per-category breakdown, then the `failures` list — every row that missed
 any metric with its reply text and which scores fell short.
 

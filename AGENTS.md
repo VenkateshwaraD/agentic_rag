@@ -59,6 +59,14 @@ Verify changes with `make lint` and `make test-unit` before committing.
 - Failure types (`missing_evidence`, `low_relevance`,
   `conflicting_documents`, `incomplete_facts`) drive rewrite strategy —
   grade sets `failure_type` + `answerability`; don't route on ad-hoc flags.
+- Grade requires **question-anchor coverage**: if the question's content
+  words appear in no retrieved chunk (text/title/client) and the reranker
+  isn't confident, that's `missing_evidence` — never draft from
+  tangentially related docs. Rerank bars are settings
+  (`grade_min_rerank_score`, `grade_rerank_confident`), not constants.
+- Every claim is validated — no count cap, and `Note:` lines are exempt
+  only in `[offline-draft`-marked replies; numeric support compares
+  bounded tokens by value (`Decimal`), never substrings.
 - Validation failures re-synthesize **once** (`resynthesized` flag), then
   abstain. Refusal/abstain paths never carry drafted content.
 - Store/LLM/tool errors are captured per-call into `errors` (sanitized) and
@@ -80,6 +88,18 @@ Verify changes with `make lint` and `make test-unit` before committing.
   stores; freshness uses `freshness.py` in both query paths.
 - Expired docs: `doc_expiry_mode=exclude` (pre-filter) or `down_rank`
   (`stale` flag + fusion penalty). Never silently include expired content.
+- `doc_title` (the H1 heading) rides on every chunk — metadata field in
+  both stores AND prepended to chunk text — so questions naming documents
+  ("the Payments Operations SLA") can retrieve them. New stores/loaders
+  must propagate it.
+- Conflict detection counts divergence only **within one client scope**:
+  different clients' agreements quoting different values is ambiguity
+  (abstain+clarify), not conflicting evidence; bank-wide docs
+  (`client_id=""`) share a scope so SLA disagreements are real conflicts.
+- Conflict records carry the **canonical section label** (indexed casing),
+  not the normalized grouping key — synthesize emits it verbatim into
+  `[DOC §section]` markers and validation resolves markers
+  case-sensitively, so a lowercased label silently fails validation.
 
 ## API (rules)
 
@@ -100,7 +120,10 @@ Verify changes with `make lint` and `make test-unit` before committing.
   also gate via `assert_ops_allowed` (role + non-empty client scope).
   Unauthorized rows must be indistinguishable from nonexistent.
 - **PII**: redact at ingest, in audit payloads, in prompt context, rescan
-  output. Errors/logs/traces carry `type(exc).__name__`, never raw values.
+  output. Preserved-id spans (TKT-/TRD-/SLA-/AGR- ids, client ids) are
+  never masked or treated as PII; `contains_pii` blocks only detections
+  ≥ `BLOCK_SCORE_FLOOR` so weak-shape hits can't refuse valid drafts.
+  Errors/logs/traces carry `type(exc).__name__`, never raw values.
 - **Ops DB**: read-only — `rag_readonly` role, READ ONLY session,
   statement_timeout, row cap + pagination. No write path exists by design.
 - **Human review**: partial/conflicting/low-support/ops-error/high-impact

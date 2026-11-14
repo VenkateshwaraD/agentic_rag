@@ -19,9 +19,11 @@ Two axes are parameterised so the comparison can isolate *what* matters:
   the delta attributable to the agent loop alone.
 
 The output dict mirrors ``graph._result_dict`` so every eval metric
-applies unchanged — refusals surface as ``refusal_correct=0``,
-hallucinated answers as ``answerability_correct=0``, echoed injection as
-``no_banned_content=0``, and leaked clients as ``acl_clean=0``.
+applies unchanged — refusals surface as ``refusal_correct=0``, echoed
+injection as ``no_banned_content=0``, and leaked clients as
+``acl_clean=0``. ``answerability`` stays ``None`` (no classifier exists
+to produce a verdict) so that metric reports ``n/a``, matching the
+claim-support convention — a missing capability is not a score.
 
 Author: venkateshwara doijode
 """
@@ -32,7 +34,6 @@ from app.core.constants import (
     COLLECTION_AGREEMENTS,
     COLLECTION_SERVICE_TEAMS,
     COLLECTION_SLAS,
-    Answerability,
 )
 from app.core.dependencies import get_hybrid
 from app.security.authz import acl_for
@@ -43,11 +44,11 @@ ALL_COLLECTIONS = [COLLECTION_AGREEMENTS, COLLECTION_SLAS, COLLECTION_SERVICE_TE
 def _rank_key(r: dict) -> float:
     """Merge-order score for one retrieved chunk.
 
-    ``rerank_score`` (reranker logit) wins when present — one model scored
-    every candidate so logits are comparable across collections, and the
-    reranker's verdict is the strategy's final ranking. ``score`` is only
-    the fallback: under hybrid strategies it mixes incomparable scales
-    (BM25 ~5-30 vs cosine 0-1) and must not decide ordering.
+    ``rerank_score`` (reranker probability) wins when present — one model
+    scored every candidate so scores are comparable across collections, and
+    the reranker's verdict is the strategy's final ranking. ``score`` is
+    only the fallback: under hybrid strategies it mixes incomparable
+    scales (BM25 ~5-30 vs cosine 0-1) and must not decide ordering.
     """
     rerank = r.get("rerank_score")
     return rerank if rerank is not None else (r.get("score") or 0.0)
@@ -58,7 +59,7 @@ def _search_all(query: str, acl, strategy: str, top_k: int) -> list[dict]:
 
     A naive RAG system has a single index — the baseline reproduces that
     by merging per-collection result lists and keeping the global top-k,
-    ordered by the strategy's final ranking signal (reranker logits for
+    ordered by the strategy's final ranking signal (reranker score for
     ``hybrid_rerank``, cosine similarity for ``dense``).
     """
     hybrid = get_hybrid()
@@ -108,9 +109,11 @@ def plain_answer(
     """Answer ``question`` with naive retrieve-then-generate.
 
     No routing (all collections searched), no tools, no guardrails, no
-    grading, no validation — so the response always claims
-    ``fully_answerable`` and never refuses or abstains. Output shape
-    matches ``graph.answer`` so eval metrics compute identically.
+    grading, no validation — and no answerability verdict, so
+    ``answerability`` is ``None`` and ``answerability_correct`` scores
+    n/a rather than a constant-label value guaranteed by construction.
+    Output shape matches ``graph.answer`` so eval metrics compute
+    identically.
     """
     acl = acl_for(principal) if use_acl else None
     retrieved = _search_all(question, acl, strategy, top_k)
@@ -124,7 +127,7 @@ def plain_answer(
         "refusal": False,
         "abstained": False,
         "abstention_reason": "",
-        "answerability": Answerability.FULL.value,
+        "answerability": None,
         "unsupported_facts": [],
         "pending_review": False,
         "validation": {},

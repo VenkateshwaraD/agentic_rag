@@ -41,6 +41,14 @@ PRESERVE_ENTITIES = ["TICKET_ID", "TRADE_ID", "DOC_ID", "CLIENT_ID"]
 
 ENTITIES = REDACT_ENTITIES  # backwards-compat alias used by tests/eval
 
+# Minimum analyzer confidence for ``contains_pii`` to treat a detection as
+# blocking. Presidio assigns ~0.4 to bare digit strings that merely resemble
+# a phone/SSN shape ('382914' inside 'amount=382914.49'); real PII detections
+# carry context or separators and score higher. The floor applies only to the
+# blocking decision — ``redact()`` stays aggressive (masking a weak hit is
+# harmless; refusing a valid draft because of one is not).
+BLOCK_SCORE_FLOOR = 0.5
+
 
 @dataclass(frozen=True)
 class CustomPattern:
@@ -135,8 +143,22 @@ class PresidioRedactor(PIIRedactor):
         ]
 
     def redact(self, text: str) -> str:
-        """Analyze for redactable entities only and replace each match."""
-        results = self._analyzer.analyze(text=text, entities=REDACT_ENTITIES, language="en")
+        """Analyze for redactable entities and replace each match.
+
+        Redactable detections fully inside a *preserved* span are dropped
+        — 'TRD-00012' is a trade key, not a PERSON, and masking it makes
+        the draft's row claims unverifiable downstream.
+        """
+        results = self._analyzer.analyze(
+            text=text, entities=REDACT_ENTITIES + PRESERVE_ENTITIES, language="en"
+        )
+        preserved = [(r.start, r.end) for r in results if r.entity_type in PRESERVE_ENTITIES]
+        results = [
+            r
+            for r in results
+            if r.entity_type in REDACT_ENTITIES
+            and not any(ps <= r.start and r.end <= pe for ps, pe in preserved)
+        ]
         if not results:
             return text
         return self._anonymizer.anonymize(
@@ -144,8 +166,26 @@ class PresidioRedactor(PIIRedactor):
         ).text
 
     def contains_pii(self, text: str) -> bool:
-        """Return True when Presidio detects any redactable entity in the text."""
-        return bool(self._analyzer.analyze(text=text, entities=REDACT_ENTITIES, language="en"))
+        """Return True when Presidio detects a redactable entity in the text.
+
+        A span a *preserved* business-id recognizer also claims is not PII
+        — the citation identifier 'SLA-003' is a document key even when
+        the generic NER model prefers to call it a PERSON. Analyzing the
+        redactable set alone lets that generic recognizer win the span
+        uncontested and would refuse legitimate cited drafts. Detections
+        below ``BLOCK_SCORE_FLOOR`` are too weak to refuse an answer on.
+        """
+        results = self._analyzer.analyze(
+            text=text, entities=REDACT_ENTITIES + PRESERVE_ENTITIES, language="en"
+        )
+        preserved = [(r.start, r.end) for r in results if r.entity_type in PRESERVE_ENTITIES]
+        for r in results:
+            if r.entity_type not in REDACT_ENTITIES or r.score < BLOCK_SCORE_FLOOR:
+                continue
+            if any(ps <= r.start and r.end <= pe for ps, pe in preserved):
+                continue
+            return True
+        return False
 
 
 class RegexRedactor(PIIRedactor):

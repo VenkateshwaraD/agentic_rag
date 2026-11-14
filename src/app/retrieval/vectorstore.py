@@ -25,7 +25,7 @@ log = get_logger(__name__)
 
 _SELECT = (
     "doc_id, chunk_id, section, text, client_id, source, doc_version, "
-    "doc_type, page_number, effective_date, expiry_date, parent_id, content_hash"
+    "doc_type, doc_title, page_number, effective_date, expiry_date, parent_id, content_hash"
 )
 
 
@@ -63,6 +63,7 @@ class VectorStore:
                     effective_date TEXT DEFAULT '',
                     expiry_date   TEXT DEFAULT '',
                     section       TEXT DEFAULT '',
+                    doc_title     TEXT DEFAULT '',
                     parent_id     TEXT DEFAULT '',
                     content_hash  TEXT DEFAULT '',
                     entitlements  JSONB NOT NULL DEFAULT '{{}}',
@@ -86,6 +87,7 @@ class VectorStore:
                 "ALTER TABLE chunks ADD COLUMN IF NOT EXISTS expiry_date TEXT DEFAULT ''",
                 "ALTER TABLE chunks ADD COLUMN IF NOT EXISTS content_hash TEXT DEFAULT ''",
                 "ALTER TABLE chunks ADD COLUMN IF NOT EXISTS parent_id TEXT DEFAULT ''",
+                "ALTER TABLE chunks ADD COLUMN IF NOT EXISTS doc_title TEXT DEFAULT ''",
                 "ALTER TABLE chunks ADD COLUMN IF NOT EXISTS embed_model TEXT DEFAULT ''",
                 "ALTER TABLE chunks ADD COLUMN IF NOT EXISTS embed_version TEXT DEFAULT ''",
                 "ALTER TABLE chunks ADD COLUMN IF NOT EXISTS embed_dim INT DEFAULT 0",
@@ -172,6 +174,7 @@ class VectorStore:
                 c.effective_date,
                 c.expiry_date,
                 c.section,
+                c.doc_title,
                 c.parent_id,
                 c.content_hash,
                 json.dumps(c.entitlements),
@@ -188,11 +191,11 @@ class VectorStore:
                 """
                 INSERT INTO chunks (doc_id, chunk_id, source, client_id, date, owner,
                                     doc_version, doc_type, page_number, effective_date,
-                                    expiry_date, section, parent_id, content_hash,
+                                    expiry_date, section, doc_title, parent_id, content_hash,
                                     entitlements, embed_model, embed_version, embed_dim,
                                     text, embedding)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s)
+                        %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (source, chunk_id) WHERE chunk_id != '' DO NOTHING""",
                 rows,
             )

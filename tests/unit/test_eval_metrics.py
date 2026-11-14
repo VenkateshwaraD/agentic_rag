@@ -70,6 +70,33 @@ def test_key_points_refusal_is_na():
     )
 
 
+# --- answerability_metric --------------------------------------------------
+
+
+def test_answerability_no_verdict_is_na():
+    """A system without classification machinery emits no verdict → n/a,
+    not a fabricated score (same convention as claim-support metrics)."""
+    row = {"expected_answerability": "fully_answerable"}
+    assert M.answerability_metric({"answerability": None}, row) is None
+    assert M.answerability_metric({}, row) is None
+
+
+def test_answerability_verdict_still_scored():
+    """Verdicts score normally when a system does classify."""
+    row = {"expected_answerability": "conflicting_evidence"}
+    assert M.answerability_metric({"answerability": "conflicting_evidence"}, row) == 1.0
+    assert M.answerability_metric({"answerability": "fully_answerable"}, row) == 0.0
+    assert (
+        M.answerability_metric(
+            {"answerability": "unauthorized"},
+            {"expected_answerability": "unauthorized", "must_refuse": True},
+        )
+        == 1.0
+    )
+    # rows without an expectation don't penalize a system that does classify
+    assert M.answerability_metric({"answerability": "fully_answerable"}, {}) == 1.0
+
+
 # --- aggregate None-safety ------------------------------------------------
 
 

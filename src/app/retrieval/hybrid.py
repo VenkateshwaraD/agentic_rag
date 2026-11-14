@@ -9,12 +9,14 @@ to evaluate RRF parameter choices.
 Author: venkateshwara doijode
 """
 
+import re
 from collections import defaultdict
 from typing import Any
 
 from langchain_core.embeddings import Embeddings
 
 from app.core.config import Settings
+from app.core.constants import TITLE_BOILER
 from app.core.logging import get_logger
 from app.retrieval.freshness import is_expired
 from app.retrieval.lexical import LexicalStore
@@ -132,6 +134,7 @@ class HybridRetriever:
             reranked = candidates
 
         results = reranked[: self._s.final_top_k]
+        results = self._backfill_named_docs(query, results, reranked)
         parent_expanded = self._expand_parents(results, acl)
         for r in results:
             if is_expired(r):
@@ -159,6 +162,41 @@ class HybridRetriever:
                 },
             },
         }
+
+    @staticmethod
+    def _backfill_named_docs(query: str, results: list[dict], ranked: list[dict]) -> list[dict]:
+        """Guarantee per-section coverage for documents the query names.
+
+        "Do the Escalations SLA and the Digital Channels SLA give the same
+        SEV-1 target?" asks about two *named* docs; conflict detection
+        needs a comparable section from each, but a 5-deep top-k slice can
+        drop the second doc's matching section entirely (ten SLAs share
+        near-identical section text, so rerank scores crowd out one doc).
+        For every title-named doc, append its best-ranked candidate for
+        each section it contributed but the slice dropped.
+        """
+        q = set(re.findall(r"[a-z0-9]+", query.lower()))
+        named: set[str] = set()
+        for r in ranked:
+            doc = str(r.get("doc_id") or "")
+            if not doc or doc in named:
+                continue
+            toks = set(re.findall(r"[a-z]+", str(r.get("doc_title") or "").lower())) - TITLE_BOILER
+            if toks and toks <= q:
+                named.add(doc)
+        if len(named) < 2:
+            return results
+        out = list(results)
+        have = {(r.get("doc_id"), str(r.get("section") or "").strip().lower()) for r in out}
+        added = 0
+        for r in ranked:
+            doc = str(r.get("doc_id") or "")
+            key = (doc, str(r.get("section") or "").strip().lower())
+            if doc in named and key not in have:
+                out.append(r)
+                have.add(key)
+                added += 1
+        return out if added else results
 
     def _expand_parents(self, results: list[dict], acl=None) -> int:
         """Attach parent-section text to child hits when parent-child is enabled.

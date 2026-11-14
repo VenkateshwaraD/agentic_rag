@@ -5,7 +5,7 @@ Author: venkateshwara doijode
 
 import re
 
-from app.agent.nodes.common import Timer, audit
+from app.agent.nodes.common import QUESTION_STOPWORDS, Timer, audit
 from app.core.constants import (
     ABSTENTION_MESSAGE,
     EV_ABSTAIN,
@@ -19,15 +19,7 @@ from app.security.guardrails import check_output
 
 _REFUSAL = REFUSAL_MESSAGE
 
-_QUESTION_STOPWORDS = frozenset(
-    {
-        "what", "is", "the", "a", "an", "of", "to", "for", "me", "my", "show",
-        "tell", "give", "how", "much", "does", "do", "are", "any", "and",
-        "or", "in", "on", "at", "about", "please", "current", "it", "its",
-        "was", "were", "be", "been", "can", "could", "would", "should",
-        "i", "we", "you", "your", "our", "us", "let", "s",
-    }
-)
+_QUESTION_STOPWORDS = QUESTION_STOPWORDS
 
 
 def _clarification_message(state) -> str | None:

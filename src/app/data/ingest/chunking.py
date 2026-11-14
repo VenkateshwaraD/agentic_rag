@@ -2,7 +2,7 @@
 
 Metadata per chunk: {doc_id, chunk_id, source, doc_type, date,
 effective_date, expiry_date, owner, entitlements, doc_version, section,
-page_number, content_hash, parent_id}
+doc_title, page_number, content_hash, parent_id}
 entitlements = {"clients": [client_id, ...] | "*", "roles": [role, ...]}
 
 Chunking is metadata-aware: the ``doc_type`` field (agreement | sla | faq |
@@ -37,6 +37,7 @@ _META_RE = re.compile(r"<!--\s*doc_id:\s*([A-Z0-9-]+)\s*(.*?)\s*-->", re.DOTALL)
 _COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 _PAGE_RE = re.compile(r"<!--\s*page:\s*(\d+)\s*-->")
 _SECTION_RE = re.compile(r"^(#{1,3})\s+(§?\S*.*)$", re.MULTILINE)
+_H1_RE = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
 _TABLE_ROW_RE = re.compile(r"^\s*\|.+\|\s*$", re.MULTILINE)
 _FAQ_Q_RE = re.compile(r"^(?:Q\d*[:.]|\*\*Q[:.]?)", re.MULTILINE)
 _PARENT_MIN_CHARS = 1200  # sections longer than this split into child chunks
@@ -59,6 +60,7 @@ class Chunk:
     entitlements: dict = field(default_factory=dict)
     doc_version: str = "1.0"
     section: str = ""
+    doc_title: str = ""
     client_id: str = ""
     text: str = ""
     chunk_id: str = ""
@@ -148,6 +150,27 @@ def _split_table_rows(body: str) -> list[str]:
     return groups
 
 
+def _doc_title(text: str) -> str:
+    """The document's human name — the H1 heading when present, else the
+    first non-comment line that reads like a title.
+
+    PDF/DOCX/TXT loads have no '#' markup; their first content line is
+    usually the title ("Client Service Desk — Holiday Coverage Schedule").
+    Table/CSV rows, sentence openers, and oversized lines aren't titles —
+    a doc that offers none just gets ''.
+    """
+    if m := _H1_RE.search(text):
+        return m.group(1).strip()
+    for ln in _COMMENT_RE.sub("", text).splitlines():
+        ln = ln.strip()
+        if not ln or ln.startswith("#"):
+            continue
+        if "|" in ln or "," in ln or ln.endswith((".", ":", ";")) or len(ln) > 120:
+            return ""
+        return ln
+    return ""
+
+
 def _split_paragraphs(body: str) -> list[str]:
     """Split a long section body into paragraph children (parent-child mode)."""
     paras = [p.strip() for p in re.split(r"\n\s*\n", body) if p.strip()]
@@ -208,6 +231,17 @@ def chunk_document(text: str, path: Path, source: str, parent_child: bool = Fals
     effective = meta.get("effective_date", date)
     expiry = meta.get("expiry_date", "")
     ents = _build_entitlements(client_id, source, meta.get("roles", ""))
+    # the doc title is the document's human name ("Payments Operations
+    # SLA") — questions that name documents can't retrieve them unless
+    # the title is searchable. Carry it as metadata AND prepend it to
+    # every chunk's text so dense + BM25 + rerank all see it (the H1
+    # itself drops out of section splitting: its body is only the
+    # metadata comment).
+    doc_title = _doc_title(text)
+
+    def _text(body: str) -> str:
+        """Title-prefixed chunk text — the doc's human name stays searchable."""
+        return f"{doc_title}\n{body}" if doc_title else body
 
     chunks: list[Chunk] = []
     for i, (section, body, page) in enumerate(_split_sections(text)):
@@ -228,10 +262,12 @@ def chunk_document(text: str, path: Path, source: str, parent_child: bool = Fals
                 section=section if len(bodies) == 1 else f"{section} [rows {j + 1}]",
                 client_id=client_id,
                 doc_type=doc_type,
+                doc_title=doc_title,
                 page_number=page,
                 effective_date=effective,
                 expiry_date=expiry,
             )
+
             if parent_child and doc_type in ("agreement", "sla") and len(part) > _PARENT_MIN_CHARS:
                 # chunk ids embed doc_version so keep_all versioning never
                 # collides and 'latest' deletes cleanly by doc_id
@@ -240,8 +276,8 @@ def chunk_document(text: str, path: Path, source: str, parent_child: bool = Fals
                     Chunk(
                         **base,
                         chunk_id=parent_id,
-                        text=part,
-                        content_hash=content_hash(part),
+                        text=_text(part),
+                        content_hash=content_hash(_text(part)),
                     )
                 )
                 for k, child in enumerate(_split_paragraphs(part)):
@@ -252,8 +288,8 @@ def chunk_document(text: str, path: Path, source: str, parent_child: bool = Fals
                             **base,
                             chunk_id=f"{parent_id}:c{k}",
                             parent_id=parent_id,
-                            text=child,
-                            content_hash=content_hash(child),
+                            text=_text(child),
+                            content_hash=content_hash(_text(child)),
                         )
                     )
             else:
@@ -261,8 +297,8 @@ def chunk_document(text: str, path: Path, source: str, parent_child: bool = Fals
                     Chunk(
                         **base,
                         chunk_id=f"{doc_id}:v{version}:{_slug(base['section'])}:{i}",
-                        text=part,
-                        content_hash=content_hash(part),
+                        text=_text(part),
+                        content_hash=content_hash(_text(part)),
                     )
                 )
     return chunks

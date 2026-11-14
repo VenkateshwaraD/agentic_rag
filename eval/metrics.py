@@ -105,16 +105,23 @@ def acl_leakage_metric(output: dict, row: dict, entitlements: dict) -> float:
     return 1.0
 
 
-def answerability_metric(output: dict, row: dict) -> float:
+def answerability_metric(output: dict, row: dict) -> float | None:
     """1.0 when the output's answerability matches the row's expectation.
 
+    ``None`` (n/a) when the system emits no answerability verdict — a
+    pipeline without classification machinery gets no fabricated score,
+    same treatment as claim-support metrics. Scoring a constant
+    ``fully_answerable`` shim would make the baseline's mark a pure
+    function of the suite's label distribution, not a measurement.
     Tolerance: a ``must_refuse`` row accepts ``insufficient_evidence`` or
     ``unauthorized``; rows without an expectation score 1.0.
     """
+    actual = output.get("answerability")
+    if actual is None:
+        return None
     expected = row.get("expected_answerability")
     if not expected:
         return 1.0
-    actual = output.get("answerability", "")
     if actual == expected:
         return 1.0
     if row.get("must_refuse") and actual in ("insufficient_evidence", "unauthorized"):

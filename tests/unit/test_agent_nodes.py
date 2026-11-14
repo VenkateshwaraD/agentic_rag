@@ -8,7 +8,7 @@ from app.agent import budget
 from app.agent.nodes import grade, guardrail_in, guardrail_out, route, validate
 from app.agent.nodes import synthesize as synth
 from app.agent.nodes.route import _ops_filters
-from app.core.constants import Answerability
+from app.core.constants import Answerability, FailureType
 from app.data.ingest.chunking import _build_entitlements
 from app.observability import review
 from app.security.authn import Principal
@@ -81,12 +81,264 @@ def test_grade_bm25_only_results_not_low_relevance():
     """Regression: bm25-only retrieval must not trigger LOW_RELEVANCE."""
     upd = grade.grade(
         _state(
-            retrieved=[{"doc_id": "D1", "section": "s", "score": 0.9, "text": "t"}],
+            question="what is the wire cutoff",
+            retrieved=[{"doc_id": "D1", "section": "s", "score": 0.9, "text": "wire cutoff 16:00"}],
             ops_calls=[],
         )
     )
     assert upd["grade_action"] == "answer"
     assert "failure_type" not in upd
+
+
+def test_grade_anchorless_question_abstains_for_clarification():
+    """'What is the fee?' carries no distinctive topic term — the agent
+    must abstain (the out-guardrail asks which client/fee), never draft
+    from whichever agreement chunks top-k happened to return."""
+    upd = grade.grade(
+        _state(
+            question="What is the fee?",
+            retrieved=[
+                {
+                    "doc_id": "AGR-001",
+                    "section": "Fee Schedule",
+                    "text": "wire fee $12.73",
+                    "rerank_score": 0.9,
+                }
+            ],
+            ops_calls=[],
+        )
+    )
+    assert upd["answerability"] == Answerability.INSUFFICIENT
+    assert upd["abstained"] is True
+
+
+def test_grade_title_named_doc_scopes_conflict_detection():
+    """'Under the <Title> SLA…' scopes the ask to one doc — divergent
+    values in *other* docs are not a conflict for that question, so the
+    answer comes from the named doc (intra-doc version conflicts still
+    count)."""
+    upd = grade.grade(
+        _state(
+            question="Under the Reporting SLA what is the sev target",
+            retrieved=[
+                {
+                    "doc_id": "SLA-003",
+                    "doc_title": "Reporting SLA",
+                    "section": "targets",
+                    "text": "sev-1 target 30 minutes",
+                    "rerank_score": 0.95,
+                },
+                {
+                    "doc_id": "SLA-002",
+                    "doc_title": "Settlement SLA",
+                    "section": "targets",
+                    "text": "sev-1 target 15 minutes",
+                    "rerank_score": 0.9,
+                },
+            ],
+            ops_calls=[],
+        )
+    )
+    assert not upd.get("conflicts")
+    assert upd["answerability"] == Answerability.FULL
+
+
+def test_grade_missing_topic_is_missing_evidence_not_drafted():
+    """PR-003 shape — 'crypto custody fee for bluepeak': weak-but-passing
+    rerank scores on tangential fee docs must not become a drafted guess
+    when the asked-about topic appears in no entitled source."""
+    upd = grade.grade(
+        _state(
+            question="What is the crypto custody fee for bluepeak?",
+            retrieved=[
+                {
+                    "doc_id": "AGR-002",
+                    "doc_title": "Client Service Agreement — Bluepeak",
+                    "client_id": "bluepeak",
+                    "section": "§3 Fees",
+                    "text": "wire transfer fee 12.73; custody services available",
+                    "rerank_score": -1.2,
+                }
+            ],
+            ops_calls=[],
+        )
+    )
+    assert upd["answerability"] == Answerability.INSUFFICIENT
+    assert upd["failure_type"] == FailureType.MISSING_EVIDENCE
+    assert upd["grade_action"] == "rewrite"
+    assert upd["missing_anchors"] == ["crypto"]
+
+
+def test_grade_confident_score_overrides_anchor_gap():
+    """A strongly relevant top hit means an uncovered anchor is vocabulary
+    mismatch, not a missing topic — 'annual' absent but the fee is there."""
+    upd = grade.grade(
+        _state(
+            question="What is the annual wire fee for bluepeak?",
+            retrieved=[
+                {
+                    "doc_id": "AGR-002",
+                    "doc_title": "Client Service Agreement — Bluepeak",
+                    "client_id": "bluepeak",
+                    "section": "§3 Fees",
+                    "text": "wire transfer fee 12.73",
+                    "rerank_score": 1.5,
+                }
+            ],
+            ops_calls=[],
+        )
+    )
+    assert upd["grade_action"] == "answer"
+    assert upd["answerability"] == Answerability.FULL
+
+
+def test_grade_tool_answer_not_anchor_gated():
+    """Ops-tool answers don't gate on doc-text anchors — 'tickets' needn't
+    appear in any retrieved chunk for a tool-backed answer."""
+    upd = grade.grade(
+        _state(
+            question="Show me the open tickets for bluepeak",
+            retrieved=[
+                {
+                    "doc_id": "D1",
+                    "section": "s",
+                    "text": "unrelated policy text",
+                    "rerank_score": -1.0,
+                }
+            ],
+            tool_results=[{"tool": "tickets", "rows": [{"id": 1}]}],
+            ops_calls=[{"tool": "tickets"}],
+        )
+    )
+    assert upd["grade_action"] == "answer"
+
+
+# --- conflict detection -----------------------------------------------------
+
+
+def _sla_chunk(doc_id, value, title="Service Level Agreement — X SLA", client=""):
+    return {
+        "doc_id": doc_id,
+        "doc_title": title,
+        "client_id": client,
+        "section": "§1 Processing Cutoffs",
+        "text": f"{title}\n| Payment rail | Same-day cutoff |\n| Domestic wires | {value} ET |",
+        "rerank_score": 1.0,
+    }
+
+
+def test_conflicts_detected_when_all_scores_weak():
+    """A negative top rerank logit must not empty the conflict pool —
+    the old max*0.5 bar exceeded every score when all hits were weak,
+    so vague queries could never surface divergent evidence."""
+    upd = grade.grade(
+        _state(
+            question="what is the domestic wire cutoff?",
+            retrieved=[
+                {**_sla_chunk("SLA-001", "15:00"), "rerank_score": -3.0},
+                {**_sla_chunk("SLA-006", "16:00"), "rerank_score": -5.0},
+            ],
+            ops_calls=[],
+        )
+    )
+    assert upd["answerability"] == Answerability.CONFLICTING
+    assert upd["conflicts"][0]["kind"] == "numeric_divergence"
+
+
+def test_conflict_lead_prefers_question_named_docs():
+    """'Do X and Y agree?' leads with the docs the user named — matching
+    on doc_title words, not whichever pair sorts first alphabetically."""
+    retrieved = [
+        _sla_chunk("SLA-001", "15:00", "Service Level Agreement — Payments Operations SLA"),
+        _sla_chunk("SLA-002", "17:00", "Service Level Agreement — Trade Settlement SLA"),
+        _sla_chunk("SLA-006", "16:00", "Service Level Agreement — Wire Transfer SLA"),
+    ]
+    conflicts = grade._detect_conflicts(
+        retrieved,
+        "Do the Payments Operations SLA and the Wire Transfer SLA agree on the "
+        "domestic wire same-day cutoff?",
+    )
+    c = conflicts[0]
+    assert set(c["lead_docs"]) == {"SLA-001", "SLA-006"}
+    assert c["doc_values"][0]["doc_id"] == "SLA-001"
+    assert c["doc_values"][1]["doc_id"] == "SLA-006"
+
+
+def test_cross_client_divergence_is_not_a_conflict():
+    """Different clients' agreements quoting different fees is ambiguity
+    ('which client?'), not contradictory evidence — divergence counts
+    only within one client scope."""
+    retrieved = [
+        _sla_chunk("AGR-002", "$12.73", "Client Services Agreement — BluePeak", "bluepeak"),
+        _sla_chunk("AGR-003", "$17.07", "Client Services Agreement — Crestline", "crestline"),
+    ]
+    assert grade._detect_conflicts(retrieved, "what is the fee?") == []
+
+
+def test_conflict_record_carries_canonical_section_label():
+    """The conflict's ``section`` is the indexed label ('§1 Processing
+    Cutoffs'), not the lowercased grouping key — the synthesizer emits it
+    verbatim into citation markers, and a lowercased marker never matches
+    a retrieved chunk's ``_sec_key`` during validation."""
+    retrieved = [
+        _sla_chunk("SLA-003", "16:00", "Service Level Agreement — Statements & Reporting SLA"),
+        _sla_chunk("SLA-004", "17:00", "Service Level Agreement — Treasury Services SLA"),
+    ]
+    conflicts = grade._detect_conflicts(
+        retrieved,
+        "Do the Statements & Reporting SLA and the Treasury Services SLA "
+        "agree on the domestic wire cutoff?",
+    )
+    assert conflicts
+    assert conflicts[0]["section"] == retrieved[0]["section"]
+
+
+def test_conflict_lead_enumerates_named_docs():
+    """The offline lead cites every lead doc — 'No — SLA-001 reports
+    15:00 …, SLA-006 reports 16:00 …' — so both asked-about values land."""
+    st = _state(
+        question="Do the Payments Operations SLA and the Wire Transfer SLA agree?",
+        retrieved=[
+            _sla_chunk("SLA-001", "15:00", "Service Level Agreement — Payments Operations SLA"),
+            _sla_chunk("SLA-006", "16:00", "Service Level Agreement — Wire Transfer SLA"),
+        ],
+        conflicts=[
+            {
+                "kind": "numeric_divergence",
+                "section": "§1 Processing Cutoffs",
+                "doc_a": "SLA-001",
+                "doc_b": "SLA-006",
+                "field": "domestic wires",
+                "values_a": ["15:00"],
+                "values_b": ["16:00"],
+                "doc_values": [
+                    {"doc_id": "SLA-001", "values": ["15:00"]},
+                    {"doc_id": "SLA-006", "values": ["16:00"]},
+                ],
+                "lead_docs": ["SLA-001", "SLA-006"],
+            }
+        ],
+    )
+    draft = synth._offline_draft(st)
+    assert "No — " in draft
+    assert "15:00" in draft and "16:00" in draft
+    assert "[SLA-001 §1 Processing Cutoffs]" in draft
+    assert "[SLA-006 §1 Processing Cutoffs]" in draft
+
+
+def test_offline_draft_strips_doc_title_from_snippet():
+    """The indexed doc-title line is metadata, not evidence — quoting it
+    into the reply would present the doc name as a stated fact."""
+    r = {
+        "doc_id": "D1",
+        "doc_title": "Payments Operations Handbook",
+        "section": "§2 Rules",
+        "text": "Payments Operations Handbook\nAll wires settle same day before cutoff.",
+    }
+    assert synth._body_text(r) == "All wires settle same day before cutoff."
+    draft = synth._offline_draft(_state(retrieved=[r]))
+    assert "Payments Operations Handbook" not in draft
+    assert "same day" in draft
 
 
 # --- routing: client hint + ops filters ------------------------------------
@@ -185,6 +437,49 @@ def test_claim_number_must_match_cited_passage():
         "The fee is $9.99 [A1 §s]", "the stated fee is $12.73 per item"
     )
     assert validate._claim_supported("The fee is $12.73 [A1 §s]", "fee is $12.73 per item")
+
+
+def test_claim_number_uses_bounded_tokens():
+    """'150' must not ride on '$1500' — numbers compare as tokens by value,
+    not substrings; '1,500'/'1500'/'1500.0' still equate."""
+    assert not validate._claim_supported("The fee is $150 [A1 §s]", "the fee is $1500")
+    assert not validate._claim_supported("The code is 20 [A1 §s]", "effective 2017")
+    assert validate._claim_supported("The fee is $1,500 [A1 §s]", "the fee is 1500")
+    assert validate._claim_supported("The cutoff is 15:00 [A1 §s]", "cutoff 15:00 ET")
+
+
+def test_every_claim_is_checked_no_cap():
+    """Regression — claims past the old 12-claim cap were silently
+    unverified; a 14-claim draft must have all 14 checked."""
+    text = "approved values: 1 2 3 4 5 6 7 8 9 10 11 12 13"
+    lines = [f"- value {i} is an approved fee [A1 §s]" for i in range(1, 14)]
+    lines.append("- value 999 is an approved fee [A1 §s]")
+    upd = validate.validate(
+        _state(
+            draft="\n".join(lines),
+            citations=[{"doc_id": "A1", "section": "s"}],
+            retrieved=[{"doc_id": "A1", "section": "s", "text": text}],
+        )
+    )
+    assert len(upd["validation"]["claims"]) == 14
+    assert upd["validation"]["verdict"] == "fail"
+    assert upd["validation"]["unsupported_claims"] == ["value 999 is an approved fee [A1 §s]"]
+
+
+def test_llm_draft_note_lines_are_validated():
+    """A 'Note:' in an LLM draft is a claim — only offline drafts' meta
+    annotations (marker line present) are exempt from verification."""
+    offline = "[offline-draft — no LLM configured] x\nNote: the sources conflict here."
+    assert validate.extract_claims(offline) == []
+    assert len(validate.extract_claims("Note: the fee is $999.99 for wires.")) == 1
+    upd = validate.validate(
+        _state(
+            draft="Note: the fee is $999.99 for all wires [A1 §s].",
+            citations=[{"doc_id": "A1", "section": "s"}],
+            retrieved=[{"doc_id": "A1", "section": "s", "text": "fee is $12.73"}],
+        )
+    )
+    assert upd["validation"]["verdict"] == "fail"
 
 
 def test_passages_for_respects_chunk_id():

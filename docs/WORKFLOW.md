@@ -95,7 +95,7 @@ flowchart TD
     ACL2 --> RRF
     RRF --> RR{bge-reranker<br/>rerank top 20}
     RR --> PC{parent-child<br/>expansion}
-    PC --> TOP[final top_k=5<br/>+ diagnostics]
+    PC --> TOP[final top_k=8<br/>+ diagnostics]
 ```
 
 `src/app/agent/nodes/retrieve.py` + `src/app/retrieval/`.
@@ -143,7 +143,7 @@ calls.
 | `guardrail_in` | entitlement scope, injection screening, seed budget | `principal`, refusal on out-of-scope client hints |
 | `route` | classify question → doc retrieval and/or ops tools; extract filters (`open tickets`, `failed trades`); honor `client_id` hint if entitled | `collections`, `tools`, `extra.ops_filters` |
 | `retrieve` | run the retrieval pipeline and/or read-only ops tools (single snapshot for multi-store reads) | `retrieved`, `tool_results`, `diagnostics`, `errors` |
-| `grade` | is the evidence good enough? relevance check (rerank score when present, else fused score); sets `failure_type` + `answerability` | `missing_evidence` / `low_relevance` / `conflicting_documents` / `incomplete_facts` |
+| `grade` | is the evidence good enough? relevance gate (probability-scale rerank score when present, else ranking score), question-anchor coverage (topic terms must appear in some chunk/tool surface), same-scope conflict detection | `missing_evidence` / `low_relevance` / `conflicting_documents` / `incomplete_facts` + `answerability` |
 | `rewrite` | failure-type-driven query rewrite (bounded by `agent_max_retries`) | new query terms |
 | `synthesize` | draft answer from *redacted copies* of evidence; offline heuristic fallback when no LLM | `reply`, `citations` |
 | `validate` | **independent checker**: every claim must be cited and supported by its cited passage; numbers checked inside the cited passage; tool-cited claims checked against ops rows; chunk_id-resolving citations | `validation{claims, unsupported_claims, invalid_citations, contradictions, verdict}` |
@@ -225,9 +225,9 @@ sequenceDiagram
 | Control | Where | Guarantee |
 |---|---|---|
 | Authentication | `security/authn.py` — API key + user → `Principal{role, client_ids}` | prototype: JSON fixture; OIDC is the production target |
-| Authorization | ACL pre-filter in **both** stores; ops tools gate `assert_ops_allowed` + `assert_entitled_rows` | unauthorized rows indistinguishable from missing |
+| Authorization (multi-tenant, permission-aware retrieval) | document-level entitlements (`client_id` scope / bank-wide `*` / role lists) enforced as an ACL pre-filter in **both** stores; ops tools gate `assert_ops_allowed` + `assert_entitled_rows` | unauthorized rows indistinguishable from missing |
 | Read-only ops | `tools/ops/` — SELECT-only assertion, READ ONLY session, statement timeout, row caps, `rag_readonly` SQL role | no write path exists |
-| PII | redacted at ingest → prompt copies → audit payloads → **SSE deltas** → final-output rescan; Presidio + custom business-ID recognizers; `redaction_eval.py` measures precision/recall | no raw PII reaches users, logs, or streams |
+| PII | redacted at ingest → prompt copies → audit payloads → **SSE deltas** → final-output rescan; Presidio + custom business-ID recognizers; preserved spans (TKT-/TRD-/SLA-/client ids) never mask or block; the output rescan blocks only at score ≥ 0.5 so weak-shape hits (a trade amount that looks like a phone number) can't refuse valid drafts; `redaction_eval.py` measures precision/recall | no raw PII reaches users, logs, or streams |
 | Audit | `observability/audit.py` — one `audit_events` row per node/decision, PII-redacted, JSON-safe | replayable request trail |
 | Review queue | risky answers flagged for human decision | non-blocking, honest failures |
 | Idempotent writes | `idempotency_keys` table | duplicate submissions never double-execute |

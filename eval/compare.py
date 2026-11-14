@@ -33,6 +33,11 @@ GAP_METRICS = [
     "unsupported_claim_rate",
 ]
 
+# The strictest baseline: identical retrieval + entitlement enforcement,
+# no agent loop — every remaining gap is provably the loop itself. When
+# present, a dedicated delta table is rendered against it.
+CONTROL = "plain-hybrid-acl"
+
 
 def _system_name(report: dict, path: Path) -> str:
     """System label for a report — stored ``system`` field, else filename."""
@@ -60,17 +65,25 @@ def compare_reports(paths: list[Path]) -> dict:
         if isinstance(v, (int, float)) and not k.endswith("_n")
     }
     summary = {m: {s: r["summary"].get(m) for r, s in reports} for m in sorted(metric_keys)}
-    delta = {}
-    for m in sorted(metric_keys):
-        base = summary[m][ref]
-        delta[m] = {
-            s: (
-                round(summary[m][s] - base, 4)
-                if isinstance(summary[m][s], (int, float)) and isinstance(base, (int, float))
-                else None
-            )
-            for s in systems
+
+    def _delta(base_name: str) -> dict:
+        base_metrics = {m: summary[m][base_name] for m in sorted(metric_keys)}
+        return {
+            m: {
+                s: (
+                    round(summary[m][s] - base_metrics[m], 4)
+                    if isinstance(summary[m][s], (int, float))
+                    and isinstance(base_metrics[m], (int, float))
+                    else None
+                )
+                for s in systems
+            }
+            for m in sorted(metric_keys)
         }
+
+    delta = _delta(ref)
+    control = CONTROL if CONTROL in systems else None
+    control_delta = _delta(control) if control else {}
 
     categories = sorted({cat for r, _ in reports for cat in (r.get("by_category") or {})})
     by_category = {
@@ -83,8 +96,10 @@ def compare_reports(paths: list[Path]) -> dict:
     return {
         "systems": systems,
         "reference": ref,
+        "control": control,
         "summary": summary,
         "delta_vs_ref": delta,
+        "delta_vs_control": control_delta,
         "by_category": by_category,
         "acl_leaks": {s: r.get("acl_leaks") for r, s in reports},
     }
@@ -109,15 +124,24 @@ def render_markdown(cmp: dict) -> str:
     for m, vals in cmp["summary"].items():
         lines.append(f"| {m} | " + " | ".join(_fmt(vals[s]) for s in systems) + " |")
 
-    lines += ["", f"## Δ vs {ref}", ""]
-    lines.append("| metric | " + " | ".join(systems) + " |")
-    lines.append("|" + "---|" * (len(systems) + 1))
-    for m, vals in cmp["delta_vs_ref"].items():
-        cells = []
-        for s in systems:
-            v = vals[s]
-            cells.append("—" if v is None else ("+0.0000" if v == 0 else f"{v:+.4f}"))
-        lines.append(f"| {m} | " + " | ".join(cells) + " |")
+    def _delta_block(title: str, deltas: dict) -> list[str]:
+        block = ["", f"## Δ vs {title}", ""]
+        block.append("| metric | " + " | ".join(systems) + " |")
+        block.append("|" + "---|" * (len(systems) + 1))
+        for m, vals in deltas.items():
+            cells = []
+            for s in systems:
+                v = vals[s]
+                cells.append("—" if v is None else ("+0.0000" if v == 0 else f"{v:+.4f}"))
+            block.append(f"| {m} | " + " | ".join(cells) + " |")
+        return block
+
+    lines += _delta_block(ref, cmp["delta_vs_ref"])
+    if cmp.get("control") and cmp["control"] != ref:
+        lines += _delta_block(
+            f"{cmp['control']} (strictest control — agentic minus the loop)",
+            cmp["delta_vs_control"],
+        )
 
     lines += ["", "## Per-category — metrics where the agent loop should differ", ""]
     for m, cats in cmp["by_category"].items():

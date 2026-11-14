@@ -16,8 +16,10 @@ the operational reference.
 `src/app/baseline.py` implements a deliberately naive RAG pipeline:
 embed question → search every collection like one merged index → draft
 once → reply. **No routing, no tools, no grading, no rewriting, no
-validation, no guardrails, no answerability classification** — it always
-reports `fully_answerable` and never refuses or abstains.
+validation, no guardrails, no answerability classification** — it never
+refuses or abstains, and emits no answerability verdict (`None`), so
+`answerability_correct` reports `n/a` for every baseline row rather
+than a constant-label value determined by the suite's label mix.
 
 The control matrix (2 retrieval strategies × ACL on/off) isolates what
 the agent loop adds from what retrieval or enforcement adds:
@@ -154,13 +156,18 @@ ACL leaks: {'agentic': 0, 'plain': 9, 'plain-acl': 0,
 | metric | agentic | plain | plain-acl | plain-hybrid | plain-hybrid-acl |
 |---|---|---|---|---|---|
 | acl_clean | 1.0 | 0.25 | 1.0 | 0.25 | 1.0 |
-| answerability_correct | 0.8333 | 0.25 | 0.25 | 0.25 | 0.25 |
+| answerability_correct | 0.8333 | n/a | n/a | n/a | n/a |
 | key_points_hit | 0.8 | 0.7 | 0.7 | 0.5 | 0.5 |
 | refusal_correct | 1.0 | 0.6667 | 0.6667 | 0.6667 | 0.6667 |
 | citation_completeness | 0.9417 | n/a | n/a | n/a | n/a |
 | unsupported_claim_rate | 0.0312 | n/a | n/a | n/a | n/a |
 
 **Δ vs agentic** — same table as signed deltas, negative = baseline loses.
+
+**Δ vs plain-hybrid-acl (strictest control)** — rendered whenever the
+`plain-hybrid-acl` report is present: the honest headline, since every
+remaining gap against *that* column is provably the agent loop rather
+than retrieval quality or missing enforcement.
 
 **Per-category tables** — the "gap" metrics broken out by scenario
 category (`doc_factual`, `tool_lookup`, `ambiguous`, `conflicting`,
@@ -174,6 +181,10 @@ everywhere else.
   validation node, so `citation_correctness`, `citation_completeness`,
   and `unsupported_claim_rate` are undefined for them — the report shows
   `n/a` and excludes them from deltas rather than awarding a free 1.0.
+  `answerability_correct` gets the same treatment: baselines emit no
+  verdict (`answerability: null`), so scoring them would only re-measure
+  the suite's `fully_answerable` share (0.25 on the PR suite by
+  construction — a constant-label artifact, not a comparison).
 - **`recall_*` of ~0.67 for baselines is by construction.** Naive RAG
   merges all collections into one global top-5 — the agent keeps
   per-collection evidence and expands parents, so it covers more of the

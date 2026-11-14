@@ -49,9 +49,17 @@ def _format_evidence(state) -> str:
         )
     for tr in state.get("tool_results", []):
         if tr.get("rows"):
-            # raw system rows are PII-redacted before entering the context
-            safe = redactor.redact(json.dumps(tr["rows"][:10], default=str))
-            parts.append(f"[{tr['tool']} system]\n{safe}")
+            # raw system rows are PII-redacted on their free-text fields
+            # before entering the context — structured ids/amounts/dates
+            # must reach the prompt verbatim or the model can't quote them
+            safe_rows = [
+                {
+                    k: (redactor.redact(str(v)) if k in _PIIISH_TOOL_FIELDS else v)
+                    for k, v in row.items()
+                }
+                for row in tr["rows"][:10]
+            ]
+            parts.append(f"[{tr['tool']} system]\n{json.dumps(safe_rows, default=str)}")
     return "\n\n---\n\n".join(parts) or "NO EVIDENCE RETRIEVED"
 
 
@@ -83,19 +91,50 @@ def _extract_citations(draft: str, retrieved: list[dict]) -> list[dict]:
 _AGREE_WORDS = re.compile(r"\b(agree|consistent|the same|match|aligned)\b")
 
 
+def _conflict_values(conflict: dict, docs: dict) -> str:
+    """'SLA-001 reports 15:00 [SLA-001 §1 …], SLA-006 reports 16:00 […]' —
+    enumerates the conflict's lead docs (question-named first), falling
+    back to the doc_a/doc_b pair for conflicts built without groups."""
+    values_of = {
+        e["doc_id"]: e["values"] for e in (conflict.get("doc_values") or []) if e.get("doc_id")
+    }
+    if not values_of:
+        values_of = {
+            conflict["doc_a"]: conflict["values_a"],
+            conflict["doc_b"]: conflict["values_b"],
+        }
+    lead = conflict.get("lead_docs") or list(values_of)[:2]
+    parts = []
+    for d in lead[:4]:
+        # cite the section the divergence was detected in — the doc's
+        # top-ranked chunk may be a different section, and a citation that
+        # doesn't cover the reported value fails independent validation
+        cite = f"[{d} §{_sec_key(conflict['section'])}]"
+        parts.append(f"{d} reports {', '.join(values_of.get(d, [])[:3])} {cite}")
+    return ", ".join(parts)
+
+
 def _conflict_lead(state, conflict: dict, docs: dict) -> str:
     """Lead sentence that *answers* a conflict question instead of burying it —
-    'No — SLA-002 reports 17:00, SLA-010 reports 15:00' for 'do X and Y agree?'."""
-    a, b = docs.get(conflict["doc_a"], {}), docs.get(conflict["doc_b"], {})
+    'No — SLA-001 reports 15:00, SLA-006 reports 16:00' for 'do X and Y agree?'."""
     field = re.sub(r"[|]+", " ", conflict.get("field", "")).strip() or "the same field"
-    va, vb = ", ".join(conflict["values_a"][:3]), ", ".join(conflict["values_b"][:3])
-    cite_a = f"[{conflict['doc_a']} §{_sec_key(a.get('section', conflict['section']))}]"
-    cite_b = f"[{conflict['doc_b']} §{_sec_key(b.get('section', conflict['section']))}]"
     no = "No — " if _AGREE_WORDS.search(state.get("question", "").lower()) else ""
-    return (
-        f"{no}sources disagree on {field}: {conflict['doc_a']} reports {va} {cite_a},"
-        f" {conflict['doc_b']} reports {vb} {cite_b}."
-    )
+    return f"{no}sources disagree on {field}: {_conflict_values(conflict, docs)}."
+
+
+def _body_text(r: dict) -> str:
+    """Chunk text minus the prepended ``doc_title`` line.
+
+    The title is prepended at index time so retrieval/rerank can match
+    document names — it's metadata, not evidence content. When the chunk
+    is quoted verbatim into a user-visible draft, the title line must come
+    back off or the doc name reads like a stated fact.
+    """
+    text = r.get("text", "")
+    title = str(r.get("doc_title") or "")
+    if title and text.startswith(title):
+        return text[len(title) :].lstrip("\n")
+    return text
 
 
 def _table_rows(text: str) -> list[str]:
@@ -157,6 +196,21 @@ def _format_tool_row(tool: str, row) -> str:
     return ", ".join(parts) or "row"
 
 
+# free-text ops fields where user-entered PII can actually appear — ids,
+# amounts, dates and statuses are structured values, never PII; masking
+# them destroys the answer (a trade shown as 'amount=<PHONE_NUMBER>')
+_PIIISH_TOOL_FIELDS = {"subject", "name"}
+
+
+def _safe_tool_row(tool: str, row) -> str:
+    """Format an ops row with only its free-text fields PII-redacted."""
+    if isinstance(row, dict):
+        row = {
+            k: (_pii().redact(str(v)) if k in _PIIISH_TOOL_FIELDS else v) for k, v in row.items()
+        }
+    return _format_tool_row(tool, row)
+
+
 def _offline_draft(state) -> str:
     """Deterministic extractive draft used when no LLM key is configured —
     keeps the pipeline runnable offline. Clearly marked; never used in prod."""
@@ -168,34 +222,30 @@ def _offline_draft(state) -> str:
     if num_conflicts:
         parts.append(f"- {_conflict_lead(state, num_conflicts[0], docs)}")
         for c in num_conflicts[1:2]:
-            a, b = docs.get(c["doc_a"], {}), docs.get(c["doc_b"], {})
             field = re.sub(r"[|]+", " ", c.get("field", "")).strip() or "the same field"
-            parts.append(
-                f"- also disagree on {field}: {', '.join(c['values_a'][:3])} "
-                f"versus {', '.join(c['values_b'][:3])} "
-                f"[{c['doc_a']} §{_sec_key(a.get('section', c['section']))}] "
-                f"[{c['doc_b']} §{_sec_key(b.get('section', c['section']))}]"
-            )
+            parts.append(f"- also disagree on {field}: {_conflict_values(c, docs)}")
     for r in state.get("retrieved", [])[:3]:
         cite = f"[{r['doc_id']} §{_sec_key(r['section'])}]"
-        if rows := _table_rows(r["text"]):
+        body = _body_text(r)
+        if rows := _table_rows(body):
             for row in rows[:3]:
                 parts.append(f"- {row} {cite}")
         else:
             # flatten to one line so the trailing citation marker covers every
             # sentence in the snippet — the validator scopes citations per line
-            snippet = " ".join(r["text"].split())[:300]
+            snippet = " ".join(body.split())[:300]
             parts.append(f"- {snippet} {cite}")
     for tr in state.get("tool_results", []):
         rows = tr.get("rows", [])
         for row in rows[:_TOOL_ROW_CAP]:
-            # ops rows are raw DB output — PII-redact before they enter the
-            # draft, same as the LLM evidence path does (else check_output
-            # would have to refuse rather than show masked values)
-            safe_row = _pii().redact(_format_tool_row(tr["tool"], row))
-            parts.append(f"- {safe_row} [{tr['tool']} system]")
+            # ops rows are raw DB output — free-text fields are PII-redacted
+            # before they enter the draft (else check_output would have to
+            # refuse rather than show masked values)
+            parts.append(f"- {_safe_tool_row(tr['tool'], row)} [{tr['tool']} system]")
         if len(rows) > _TOOL_ROW_CAP:
-            # 'Note:' lines are skipped by the claim extractor — not a claim
+            # offline-draft 'Note:' lines are answer-meta annotations the
+            # claim extractor skips — only in drafts carrying the offline
+            # marker; an LLM draft's Note lines are verified as claims
             parts.append(f"Note: {len(rows) - _TOOL_ROW_CAP} further rows omitted for brevity.")
     return "\n".join(parts)
 

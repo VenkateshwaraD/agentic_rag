@@ -46,6 +46,26 @@ def test_chunk_document_metadata():
     assert "agent" in c.entitlements["roles"]
 
 
+def test_chunk_document_doc_title():
+    """The H1 title rides on every chunk — metadata AND a searchable first
+    text line, so questions naming a document can retrieve it."""
+    chunks = chunk_document(DOC, Path("AGR-001_acme.md"), "agreements")
+    for c in chunks:
+        assert c.doc_title == "Client Services Agreement — Acme"
+        assert c.text.startswith("Client Services Agreement — Acme\n")
+
+
+def test_chunk_document_doc_title_fallback():
+    """Non-markdown loads (PDF/DOCX/TXT) have no H1 — the first
+    title-shaped content line becomes doc_title; CSV headers don't."""
+    txt = "<!-- doc_id: POL-101 -->\nClient Service Desk — Holiday Coverage\n\nRow one.\n"
+    chunks = chunk_document(txt, Path("POL-101_x.txt"), "service_teams")
+    assert chunks[0].doc_title == "Client Service Desk — Holiday Coverage"
+    csv = "<!-- doc_id: SVC-101 -->\nteam,coverage_window,region\nOps,18:00-08:00,us\n"
+    chunks = chunk_document(csv, Path("SVC-101_x.csv"), "service_teams")
+    assert chunks[0].doc_title == ""
+
+
 def test_chunk_document_bank_wide():
     """Verify docs without a client_id get wildcard (bank-wide) entitlements."""
     doc = "<!-- doc_id: SLA-001 -->\n\n## §1 Cutoffs\nWire cutoff is 16:00 ET."
