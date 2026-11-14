@@ -8,6 +8,7 @@ objects enriched from retrieved chunk metadata.
 Author: venkateshwara doijode
 """
 
+import datetime as dt
 import json
 import re
 
@@ -19,6 +20,16 @@ from app.core.constants import CITATION_PATTERN, EV_AGENT_STEP, REFUSAL_MESSAGE,
 _REFUSAL = REFUSAL_MESSAGE
 
 
+def _sec_key(section) -> str:
+    """Normalize a section label for citation markers.
+
+    Indexed sections already carry a leading '§' ("§2 Fee Schedule"), so
+    composing ``§{section}`` produced '§§'. Everything that emits or
+    matches a marker goes through this so a single '§' appears exactly once.
+    """
+    return str(section or "").lstrip("§").strip()
+
+
 def _format_evidence(state) -> str:
     """Render retrieved chunks and PII-redacted tool rows as a prompt evidence block."""
     from app.core.dependencies import get_pii_redactor
@@ -28,7 +39,9 @@ def _format_evidence(state) -> str:
     for r in state.get("retrieved", []):
         meta = f"v{r['doc_version']}" if r.get("doc_version") else ""
         eff = f" eff {r['effective_date']}" if r.get("effective_date") else ""
-        parts.append(f"[{r['doc_id']} §{r['section']}] ({r['source']}) {meta}{eff}\n{r['text']}")
+        parts.append(
+            f"[{r['doc_id']} §{_sec_key(r['section'])}] ({r['source']}) {meta}{eff}\n{r['text']}"
+        )
     for tr in state.get("tool_results", []):
         if tr.get("rows"):
             # raw system rows are PII-redacted before entering the context
@@ -45,11 +58,15 @@ def _extract_citations(draft: str, retrieved: list[dict]) -> list[dict]:
     those fields are present in the index metadata.
     """
     citations = []
+    seen: set[tuple[str, str]] = set()
     for m in re.finditer(CITATION_PATTERN, draft):
-        doc_id, section = m.group(1), m.group(2).strip()
+        doc_id, section = m.group(1), _sec_key(m.group(2))
+        if (doc_id, section) in seen:
+            continue  # one Source entry per (doc, section) — not per chunk
+        seen.add((doc_id, section))
         cit = {"doc_id": doc_id, "section": section}
         for r in retrieved:
-            if r.get("doc_id") == doc_id and str(r.get("section")) == section:
+            if r.get("doc_id") == doc_id and _sec_key(r.get("section")) == section:
                 for k in ("chunk_id", "doc_version", "effective_date"):
                     if r.get(k):
                         cit[k] = r[k]
@@ -58,32 +75,119 @@ def _extract_citations(draft: str, retrieved: list[dict]) -> list[dict]:
     return citations
 
 
+_AGREE_WORDS = re.compile(r"\b(agree|consistent|the same|match|aligned)\b")
+
+
+def _conflict_lead(state, conflict: dict, docs: dict) -> str:
+    """Lead sentence that *answers* a conflict question instead of burying it —
+    'No — SLA-002 reports 17:00, SLA-010 reports 15:00' for 'do X and Y agree?'."""
+    a, b = docs.get(conflict["doc_a"], {}), docs.get(conflict["doc_b"], {})
+    field = re.sub(r"[|]+", " ", conflict.get("field", "")).strip() or "the same field"
+    va, vb = ", ".join(conflict["values_a"][:3]), ", ".join(conflict["values_b"][:3])
+    cite_a = f"[{conflict['doc_a']} §{_sec_key(a.get('section', conflict['section']))}]"
+    cite_b = f"[{conflict['doc_b']} §{_sec_key(b.get('section', conflict['section']))}]"
+    no = "No — " if _AGREE_WORDS.search(state.get("question", "").lower()) else ""
+    return (
+        f"{no}sources disagree on {field}: {conflict['doc_a']} reports {va} {cite_a},"
+        f" {conflict['doc_b']} reports {vb} {cite_b}."
+    )
+
+
+def _table_rows(text: str) -> list[str]:
+    """Render a markdown table in the chunk as 'label: value' lines.
+
+    Returns [] for non-table text. The offline draft emits each row as its
+    own cited bullet, so the per-line citation rule still holds without
+    flattening the table into one unreadable line.
+    """
+    rows = [ln.strip() for ln in text.splitlines() if ln.strip().startswith("|")]
+    if len(rows) < 2:
+        return []
+    header = [c.strip() for c in rows[0].strip("|").split("|")]
+    out = []
+    for line in rows[1:]:
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if not any(c.strip("-: ") for c in cells):
+            continue  # separator row |---|---|
+        if len(cells) == 2:
+            out.append(f"{cells[0]}: {cells[1]}")
+        else:
+            out.append(
+                f"{cells[0]} — "
+                + "; ".join(
+                    f"{header[i]} {c}" if i < len(header) and header[i] else c
+                    for i, c in enumerate(cells[1:], 1)
+                )
+            )
+    return out
+
+
+_TOOL_ROW_FIELDS = {
+    "tickets": ("ticket_id", "status", "category", "subject", "created_at"),
+    "trades": ("trade_id", "status", "amount", "currency", "value_date", "settled_at"),
+    "accounts": ("account_id", "tier", "region", "status", "opened_at"),
+}
+_TOOL_ROW_CAP = 5
+
+
+def _fmt_val(v) -> str:
+    """One display value — datetimes become dates, everything else str()."""
+    if isinstance(v, dt.datetime):
+        return v.date().isoformat()
+    if isinstance(v, dt.date):
+        return v.isoformat()
+    return str(v)
+
+
+def _format_tool_row(tool: str, row) -> str:
+    """Render one ops row as a readable summary — never a Python dict repr.
+
+    Field whitelists keep unasked-for fields (and the internal client_id)
+    out of the draft; dates render as ISO, not ``datetime.date(2025,...)``.
+    """
+    if not isinstance(row, dict):
+        return str(row)[:200]
+    fields = _TOOL_ROW_FIELDS.get(tool) or tuple(k for k in row if k != "client_id")[:5]
+    parts = [f"{k}={_fmt_val(row[k])}" for k in fields if row.get(k) not in (None, "")]
+    return ", ".join(parts) or "row"
+
+
 def _offline_draft(state) -> str:
     """Deterministic extractive draft used when no LLM key is configured —
     keeps the pipeline runnable offline. Clearly marked; never used in prod."""
     parts = ["[offline-draft — no LLM configured] Based on the retrieved evidence:"]
-    # surface detected contradictions with the divergent values + a dual
-    # citation — a conflict-aware answer must name what disagrees
-    for c in state.get("conflicts", [])[:2]:
-        if c.get("kind") != "numeric_divergence":
-            continue
-        docs = {r.get("doc_id"): r for r in state.get("retrieved", [])}
-        a, b = docs.get(c["doc_a"], {}), docs.get(c["doc_b"], {})
-        field = re.sub(r"[|]+", " ", c.get("field", "")).strip() or "the same field"
-        parts.append(
-            f"- Sources disagree on {field}: {', '.join(c['values_a'][:3])} "
-            f"versus {', '.join(c['values_b'][:3])} "
-            f"[{c['doc_a']} §{a.get('section', c['section'])}] "
-            f"[{c['doc_b']} §{b.get('section', c['section'])}]"
-        )
+    # surface detected contradictions first — a conflict-aware answer leads
+    # with the disagreement (and a dual citation), not the boilerplate
+    docs = {r.get("doc_id"): r for r in state.get("retrieved", [])}
+    num_conflicts = [c for c in state.get("conflicts", []) if c.get("kind") == "numeric_divergence"]
+    if num_conflicts:
+        parts.append(f"- {_conflict_lead(state, num_conflicts[0], docs)}")
+        for c in num_conflicts[1:2]:
+            a, b = docs.get(c["doc_a"], {}), docs.get(c["doc_b"], {})
+            field = re.sub(r"[|]+", " ", c.get("field", "")).strip() or "the same field"
+            parts.append(
+                f"- also disagree on {field}: {', '.join(c['values_a'][:3])} "
+                f"versus {', '.join(c['values_b'][:3])} "
+                f"[{c['doc_a']} §{_sec_key(a.get('section', c['section']))}] "
+                f"[{c['doc_b']} §{_sec_key(b.get('section', c['section']))}]"
+            )
     for r in state.get("retrieved", [])[:3]:
-        # flatten to one line so the trailing citation marker covers every
-        # sentence in the snippet — the validator scopes citations per line
-        snippet = " ".join(r["text"].split())[:300]
-        parts.append(f"- {snippet} [{r['doc_id']} §{r['section']}]")
+        cite = f"[{r['doc_id']} §{_sec_key(r['section'])}]"
+        if rows := _table_rows(r["text"]):
+            for row in rows[:3]:
+                parts.append(f"- {row} {cite}")
+        else:
+            # flatten to one line so the trailing citation marker covers every
+            # sentence in the snippet — the validator scopes citations per line
+            snippet = " ".join(r["text"].split())[:300]
+            parts.append(f"- {snippet} {cite}")
     for tr in state.get("tool_results", []):
-        for row in tr.get("rows", [])[:3]:
-            parts.append(f"- {row} [{tr['tool']} system]")
+        rows = tr.get("rows", [])
+        for row in rows[:_TOOL_ROW_CAP]:
+            parts.append(f"- {_format_tool_row(tr['tool'], row)} [{tr['tool']} system]")
+        if len(rows) > _TOOL_ROW_CAP:
+            # 'Note:' lines are skipped by the claim extractor — not a claim
+            parts.append(f"Note: {len(rows) - _TOOL_ROW_CAP} further rows omitted for brevity.")
     return "\n".join(parts)
 
 

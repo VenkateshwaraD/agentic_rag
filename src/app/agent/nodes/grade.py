@@ -70,6 +70,41 @@ def _detect_conflicts(retrieved: list[dict]) -> list[dict]:
     # Version/effective-date boilerplate lines are skipped — a different
     # amendment date is not a disagreement about the governed fact.
     _SKIP_KEYS = ("version", "effective", "amend", "entered into")
+    # unit/table syntax tokens stripped from claim keys — "| Domestic wires
+    # | 17:00 ET |" and the same line at 16:00 must share the key
+    # "domestic wires", not "domestic wires et" vs "domestic wires et"
+    _UNIT_WORDS = frozenset(
+        {
+            "et",
+            "ist",
+            "utc",
+            "gmt",
+            "est",
+            "edt",
+            "pst",
+            "pdt",
+            "cst",
+            "cdt",
+            "bst",
+            "min",
+            "mins",
+            "hr",
+            "hrs",
+            "hour",
+            "hours",
+            "per",
+            "usd",
+            "eur",
+            "gbp",
+            "inr",
+        }
+    )
+
+    def _claim_key(line: str) -> str:
+        """Claim-slot key: line text minus numbers, pipes, and unit words."""
+        text = _NUM_RE.sub(" ", line).replace("|", " ").replace("§", " ").lower()
+        return " ".join(w for w in text.split() if w not in _UNIT_WORDS)[:80]
+
     by_section: dict[str, list[dict]] = defaultdict(list)
     for r in retrieved:
         key = str(r.get("section", "")).strip().lower()
@@ -86,7 +121,7 @@ def _detect_conflicts(retrieved: list[dict]) -> list[dict]:
                 nums = _NUM_RE.findall(line)
                 if not nums:
                     continue
-                key = re.sub(r"\s+", " ", _NUM_RE.sub(" ", line)).strip().lower()[:80]
+                key = _claim_key(line)
                 if not key or any(s in key for s in _SKIP_KEYS):
                     continue
                 claims[key].update(nums)

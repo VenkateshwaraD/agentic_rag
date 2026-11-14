@@ -170,6 +170,8 @@ def run_eval(
     result["system"] = system
     result["version_snapshot"] = M.version_snapshot(dataset_path, len(rows))
     result["version_snapshot"]["judge_model"] = ragas_cfg.model or s.anthropic_model
+    result["version_snapshot"]["suite"] = suite if not golden_path else str(golden_path)
+    result["version_snapshot"]["repeat"] = repeat
     if repeat > 1:
         result["variance"] = M.variance_summary([r["summary"] for r in run_results])
         result["runs"] = repeat

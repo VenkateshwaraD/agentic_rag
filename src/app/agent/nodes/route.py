@@ -55,16 +55,26 @@ _KEYWORDS = {
 }
 _OPS_KEYWORDS = {
     "trades": (
-        "trade",
+        "trades",
+        "trade status",
         "wire status",
         "payment status",
         "transfer status",
         "settled",
         "failed wire",
         "transaction",
+        "transactions",
     ),
-    "tickets": ("ticket", "case", "history", "previous issue", "complaint", "tkt-"),
-    "accounts": ("account", "tier", "region", "agreement on file", "account details"),
+    "tickets": (
+        "ticket",
+        "tickets",
+        "case history",
+        "previous issue",
+        "complaint",
+        "complaints",
+        "tkt-",
+    ),
+    "accounts": ("account", "accounts", "tier", "region", "agreement on file", "account details"),
 }
 # keyword → schema-value maps for heuristic ops filters — the typed
 # TradesQuery/TicketsQuery fields, extracted from the question so
@@ -153,7 +163,13 @@ def _heuristic_route(question: str) -> dict:
     """
     q = question.lower()
     sources = [c for c, kws in _KEYWORDS.items() if any(k in q for k in kws)]
-    ops = [o for o, kws in _OPS_KEYWORDS.items() if any(k in q for k in kws)]
+    # word-boundary match for ops keywords — "Trade Settlement SLA" must
+    # not fire the trades tool, and "showcase" must not fire tickets
+    ops = [
+        o
+        for o, kws in _OPS_KEYWORDS.items()
+        if any(re.search(rf"\b{re.escape(k)}\b", q) for k in kws)
+    ]
     cid = _extract_client_id(q)
     return {"sources": sources or ALL_SOURCES, "ops": ops, "client_id": cid}
 

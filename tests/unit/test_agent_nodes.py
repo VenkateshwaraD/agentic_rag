@@ -6,6 +6,7 @@ Author: venkateshwara doijode
 
 from app.agent import budget
 from app.agent.nodes import grade, guardrail_in, guardrail_out, route, validate
+from app.agent.nodes import synthesize as synth
 from app.agent.nodes.route import _ops_filters
 from app.core.constants import Answerability
 from app.data.ingest.chunking import _build_entitlements
@@ -281,3 +282,91 @@ def test_extract_client_id_resolves_known_clients():
     assert route._extract_client_id("what is the wire fee for acme?") == "acme"
     assert route._extract_client_id("show tickets for GRAINMARK") == "grainmark"
     assert route._extract_client_id("fee for a client that does not exist") is None
+
+
+def test_ops_keywords_word_boundary():
+    """'Trade Settlement SLA' must not fire the trades tool; real trade
+    phrasing still routes correctly."""
+    d = route._heuristic_route("Do the Trade Settlement SLA and the Digital Channels SLA agree?")
+    assert "trades" not in d["ops"]
+    assert "trades" in route._heuristic_route("show failed wire trades for acme")["ops"]
+    assert "tickets" in route._heuristic_route("status of ticket TKT-00001")["ops"]
+    assert "tickets" in route._heuristic_route("show open tickets for acme")["ops"]
+    assert "accounts" in route._heuristic_route("show accounts for acme")["ops"]
+
+
+# --- synthesize draft formatting ------------------------------------------------
+
+
+def test_sec_key_strips_double_section_sign():
+    """Markers must show a single § even though indexed sections carry one."""
+    assert synth._sec_key("§2 Fee Schedule") == "2 Fee Schedule"
+    assert synth._sec_key("§1 Processing Cutoffs") == "1 Processing Cutoffs"
+    assert synth._sec_key("Intro") == "Intro"
+
+
+def test_extract_citations_dedupes_doc_section():
+    """Two chunks from the same doc+section produce one Sources entry."""
+    draft = "fee [AGR-002 §2 Fee Schedule]. parties [AGR-002 §2 Fee Schedule]."
+    cits = synth._extract_citations(
+        draft, [{"doc_id": "AGR-002", "section": "§2 Fee Schedule", "doc_version": "2.0"}]
+    )
+    assert len(cits) == 1
+    assert cits[0]["doc_version"] == "2.0"
+
+
+def test_offline_draft_formats_tool_rows_cleanly():
+    """Tool rows render as readable summaries — no dict reprs, no client_id."""
+    st = _state(
+        retrieved=[],
+        tool_results=[
+            {
+                "tool": "tickets",
+                "rows": [
+                    {
+                        "ticket_id": "TKT-00009",
+                        "client_id": "acme",
+                        "status": "open",
+                        "subject": "Dispute of wire transfer fee",
+                    }
+                ],
+            }
+        ],
+    )
+    draft = synth._offline_draft(st)
+    assert "TKT-00009" in draft
+    assert "client_id" not in draft
+    assert "'status':" not in draft  # no Python dict repr
+
+
+def test_conflict_lead_answers_agree_questions():
+    """'Do X and Y agree?' opens with 'No —' plus both values, not boilerplate."""
+    st = _state(
+        question="Do SLA-002 and SLA-010 agree on the wire cutoff?",
+        retrieved=[
+            {"doc_id": "SLA-002", "section": "§1 Cutoffs", "text": "domestic wires 17:00"},
+            {"doc_id": "SLA-010", "section": "§1 Cutoffs", "text": "domestic wires 15:00"},
+        ],
+        conflicts=[
+            {
+                "kind": "numeric_divergence",
+                "section": "cutoffs",
+                "doc_a": "SLA-002",
+                "doc_b": "SLA-010",
+                "field": "domestic wires",
+                "values_a": ["17:00"],
+                "values_b": ["15:00"],
+            }
+        ],
+    )
+    draft = synth._offline_draft(st)
+    assert "No — " in draft
+    assert "17:00" in draft and "15:00" in draft
+    assert "§§" not in draft
+
+
+def test_table_rows_render_label_value():
+    """Markdown tables become 'label: value' lines, not flattened pipes."""
+    text = "Intro sentence.\n| Payment rail | Same-day cutoff |\n|---|---|\n| Domestic wires | 17:00 ET |"
+    assert synth._table_rows(text) == ["Domestic wires: 17:00 ET"]
+    assert synth._table_rows("just prose, no pipes") == []

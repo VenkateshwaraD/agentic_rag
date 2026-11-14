@@ -15,6 +15,7 @@ Author: venkateshwara doijode
 import re
 
 from app.agent.nodes.common import Timer, audit
+from app.agent.nodes.synthesize import _sec_key
 from app.core.constants import ABSTENTION_MESSAGE, EV_AGENT_STEP, Answerability
 
 _SENT_RE = re.compile(r"(?<=[.!?])\s+")
@@ -60,7 +61,7 @@ def _citation_valid(cit: dict, retrieved: list[dict]) -> bool:
     for r in retrieved:
         if r.get("doc_id") != cit.get("doc_id"):
             continue
-        if str(r.get("section")) != str(cit.get("section")):
+        if _sec_key(r.get("section")) != _sec_key(cit.get("section")):
             continue
         if cit.get("chunk_id") and r.get("chunk_id") != cit.get("chunk_id"):
             continue
@@ -79,7 +80,7 @@ def _passages_for(citation: dict, retrieved: list[dict]) -> str:
         r.get("text", "")
         for r in retrieved
         if r.get("doc_id") == citation.get("doc_id")
-        and str(r.get("section")) == str(citation.get("section"))
+        and _sec_key(r.get("section")) == _sec_key(citation.get("section"))
         and (not citation.get("chunk_id") or r.get("chunk_id") == citation["chunk_id"])
     )
 
@@ -97,8 +98,11 @@ def _claim_supported(claim: str, cited_text: str) -> bool:
         return False
     # strip inline [DOC §sec] citation markers — their tokens (doc ids,
     # section numbers) are not claim content and would never appear in
-    # the passage text
+    # the passage text. Bare doc-id tokens in prose (a claim naming
+    # "SLA-002") are stripped too — "002" is an identifier, not an
+    # asserted fact that must appear in the evidence
     claim = _CITE_RE.sub(" ", claim)
+    claim = re.sub(r"\b[A-Z]{2,4}-\d{3,}\b", " ", claim)
     claim_nums = set(_NUM_RE.findall(claim))
     if claim_nums:
         # every numeric must be asserted in the cited passage itself
@@ -144,7 +148,8 @@ def validate(state):
             cited = [
                 c
                 for c in citations
-                if f"[{c['doc_id']} §{c['section']}]" in line or f"[{c['doc_id']}]" in line
+                if f"[{c['doc_id']} §{_sec_key(c['section'])}]" in line
+                or f"[{c['doc_id']}]" in line
             ]
             cited_text = " ".join(_passages_for(c, retrieved) for c in cited)
             # tool-cited claims pull support from the ops evidence pool —
@@ -158,7 +163,12 @@ def validate(state):
             # uncited claims cannot be verified — claim-level evidence required
             supported = bool(cited_text) and _claim_supported(claim, cited_text)
             claim_results.append(
-                {"text": claim[:200], "cited": bool(cited), "supported": supported}
+                {
+                    "text": claim[:200],
+                    "cited": bool(cited) or tool_cited,
+                    "supported": supported,
+                    "via": "tool" if tool_cited and not cited else "docs",
+                }
             )
             if not supported:
                 unsupported.append(claim[:200])

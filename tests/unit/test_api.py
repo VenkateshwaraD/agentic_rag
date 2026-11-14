@@ -154,3 +154,17 @@ def test_production_guard_rejects_dev_defaults():
     with pytest.raises(RuntimeError, match="unsafe production"):
         Settings(environment="production").assert_safe_for_production()
     Settings().assert_safe_for_production()  # development — no-op
+
+
+def test_admin_fixture_sees_all_clients():
+    """u_admin authenticates with the admin role and every fixture client —
+    the broadest-entitlement path the ACL tests must cover."""
+    from app.core.config import get_settings
+    from app.security.authn import authenticate, load_users
+
+    principal = authenticate("dev-key-admin", "u_admin")
+    assert principal.role == "admin"
+    all_clients = {
+        cid for u in load_users(get_settings().users_file).values() for cid in u["client_ids"]
+    }
+    assert set(principal.client_ids) == all_clients

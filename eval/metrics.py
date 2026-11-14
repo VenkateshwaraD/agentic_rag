@@ -287,6 +287,7 @@ def version_snapshot(dataset_path, rows: int) -> dict:
     data = dataset_path.read_bytes() if dataset_path.exists() else b""
     return {
         "model": s.anthropic_model,
+        "llm_configured": bool(s.anthropic_api_key),
         "embedding": {
             "provider": s.embedding_provider,
             "model": (
@@ -378,7 +379,25 @@ def aggregate(per_row: list[dict]) -> dict:
             "id": r["id"],
             "category": r["category"],
             "question": r["question"],
-            "reply": r["output"].get("reply", "")[:300],
+            "reply": (r.get("output") or {}).get("reply", ""),
+            "expected": {
+                k: r[k]
+                for k in (
+                    "expected_answerability",
+                    "must_refuse",
+                    "key_points",
+                    "required_doc_ids",
+                    "must_not_contain",
+                )
+                if r.get(k) not in (None, "", [], False)
+            },
+            "actual": {
+                "answerability": (r.get("output") or {}).get("answerability"),
+                "refusal": (r.get("output") or {}).get("refusal"),
+                "abstained": (r.get("output") or {}).get("abstained"),
+                "cost_usd": ((r.get("output") or {}).get("budget") or {}).get("cost_usd"),
+                "llm_calls": ((r.get("output") or {}).get("budget") or {}).get("llm_calls"),
+            },
             "metrics": {
                 k: v
                 for k, v in r["metrics"].items()
@@ -388,4 +407,26 @@ def aggregate(per_row: list[dict]) -> dict:
         for r in per_row
         if any(isinstance(v, (int, float)) and _is_bad(k, v) for k, v in r["metrics"].items())
     ]
-    return {"summary": summary, "by_category": by_category, "failures": failures}
+    row_results = [
+        {
+            "id": r["id"],
+            "category": r["category"],
+            "question": r["question"],
+            "answerability": (r.get("output") or {}).get("answerability"),
+            "refusal": (r.get("output") or {}).get("refusal"),
+            "abstained": (r.get("output") or {}).get("abstained"),
+            "cost_usd": ((r.get("output") or {}).get("budget") or {}).get("cost_usd"),
+            "llm_calls": ((r.get("output") or {}).get("budget") or {}).get("llm_calls"),
+            "tokens_used": ((r.get("output") or {}).get("budget") or {}).get("tokens_used"),
+            "failed_metrics": [
+                k for k, v in r["metrics"].items() if isinstance(v, (int, float)) and _is_bad(k, v)
+            ],
+        }
+        for r in per_row
+    ]
+    return {
+        "summary": summary,
+        "by_category": by_category,
+        "failures": failures,
+        "rows": row_results,
+    }
