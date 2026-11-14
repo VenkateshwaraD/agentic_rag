@@ -25,6 +25,26 @@ ACL is enforced as a **pre-filter** in pgvector (`WHERE`), OpenSearch
 store. PII is redacted at ingest (Presidio, irreversible placeholders) and
 re-scanned on the output draft.
 
+## Objective
+
+Production-oriented RAG a regulated client-service org could trust — where
+trust is three measurable properties, not a vibe:
+
+1. **Authorization by construction** — client entitlements enforced *inside*
+   retrieval and every ops call; unauthorized data is never fetched. Verified
+   by eval gates (`acl_clean` + `--fail-on-leak`), not just code review.
+2. **Honesty over fluency** — every answer is classified (fully / partially /
+   insufficient / conflicting / unauthorized); weak evidence → abstain,
+   disagreement → surface both sides, hostile input → refuse.
+3. **Provable quality** — claims independently validated against citations;
+   deterministic eval suites + a plain-RAG baseline (`eval/compare.py`)
+   measure whether the agent loop earns its complexity; a human-review
+   queue catches what automation shouldn't decide.
+
+Explicit non-goals today: knowledge-graph retrieval (this is not GraphRAG),
+multi-turn conversation, semantic answer caching, and model-tier cost
+routing — see `docs/WORKFLOW.md` for what the state machine does cover.
+
 ## Quickstart
 
 Operational walkthrough — config, keys, input data, run modes, results:
