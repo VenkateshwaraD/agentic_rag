@@ -1,0 +1,5 @@
+team,coverage_window,contact,region
+Payments Operations,18:00-08:00 ET on-call,payments-oncall@bank.example.com,us-east
+Trade Settlement,18:00-08:00 ET on-call,trade-settle-oncall@bank.example.com,us-east
+Digital Channels,weekend rota,digital-oncall@bank.example.com,us-west
+Escalations Desk,24x7 duty manager,escalations-duty@bank.example.com,us-east

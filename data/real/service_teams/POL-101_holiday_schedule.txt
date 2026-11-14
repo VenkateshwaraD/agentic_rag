@@ -1,0 +1,15 @@
+Client Service Desk — Holiday Coverage Schedule
+
+<!-- doc_id: POL-101 | doc_type: ops | version: 1.0 | effective_date: 2025-01-01 -->
+
+Bank holidays observed by the client service desk. On these dates the desk
+operates with reduced staffing: SEV-1 incidents only, all other inquiries
+respond to next business day.
+
+New Year's Day, Martin Luther King Jr. Day, Presidents' Day, Memorial Day,
+Juneteenth, Independence Day, Labor Day, Columbus Day, Veterans Day,
+Thanksgiving Day, Christmas Day.
+
+On holiday eves (day before Thanksgiving, Christmas Eve, New Year's Eve)
+the desk closes at 14:00 ET. Escalations after close route to the on-call
+senior agent via the PagerDuty rotation described in SVC-001.

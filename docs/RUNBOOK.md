@@ -74,11 +74,14 @@ header, not the `admin` role.
 | users + entitlements | `db/seed/users.json` | `copilot corpus generate` |
 | expected facts (eval authoring aid) | `data/synthetic/facts.json` | `copilot corpus generate` |
 
-**Adding your own document:** drop a `.md` into the right
-`data/synthetic/<collection>/` folder with a header block like the
-existing files (`doc_id`, `client_id`, `title`, `version`, dates,
-`roles`/`clients` entitlement fields — copy an existing file's header),
-then `copilot index` (incremental — only changed docs re-index).
+**Adding your own document:** drop it into `data/real/<collection>/`
+(`agreements`/`slas`/`service_teams` — the drop-in corpus; `.md`, `.txt`,
+`.csv`, `.pdf`, `.docx` supported) with a header block like the existing
+files (`doc_id`, `client_id`, `title`, `version`, dates, `roles`/`clients`
+entitlement fields). CSVs can't carry the comment header — name the file
+`<DOC-ID>.csv` and the stem becomes the `doc_id`. Then `copilot index`
+(incremental — only changed docs re-index). Example real-corpus docs live
+in `data/real/` (`AGR-101`, `SLA-101`, `POL-101`, `SVC-101`).
 
 ## 4. Start the stack
 
