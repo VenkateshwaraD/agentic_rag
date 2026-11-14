@@ -91,7 +91,7 @@ fetched, let alone leaked into context.
 | Tracing | Langfuse | per-request LLM/step traces |
 | Eval | custom harness + Ragas (`eval/`) | scenario suites, gates, agentic-vs-baseline compare |
 | Deploy | Docker Compose (dev) · K8s/Kustomize on EKS (prod) | External Secrets + IRSA, HPA/PDB, smoke gates |
-| CI | GitHub Actions (SHA-pinned) | lint/type/test + eval leak/threshold gates |
+| CI | GitLab CI (pinned images) | lint/type/test + eval leak/threshold gates |
 | Tooling | pytest · ruff · mypy | 100+ unit tests offline-capable; lint + typecheck |
 
 ## Objective
@@ -174,9 +174,10 @@ sentence-transformers model — handy for offline dev/tests.
 - K8s: `deploy/k8s/` kustomize — `overlays/staging` includes in-cluster
   Postgres/OpenSearch StatefulSets; `overlays/prod` expects RDS + Amazon
   OpenSearch Service (ConfigMap patch) and a managed/shared Langfuse.
-- CI/CD: `.github/workflows/ci.yml` — test → build/push ECR (OIDC) →
-  staging auto-deploy → prod via manual `workflow_dispatch`.
-- Required GitHub secrets: `AWS_ROLE_ARN`, `EKS_CLUSTER`; app secrets live
+- CI/CD: `.gitlab-ci.yml` (flow/diagram: `docs/CICD.md`) — test →
+  build/push ECR (OIDC) → staging auto-deploy → prod via a manual
+  `deploy-prod` job.
+- Required GitLab CI/CD variables: `AWS_ROLE_ARN`, `EKS_CLUSTER`; app secrets live
   in `copilot-secrets` (template in `deploy/k8s/base/secret.yaml` — wire to
   External Secrets / Sealed Secrets for real use).
 

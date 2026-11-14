@@ -132,12 +132,16 @@ Verify changes with `make lint` and `make test-unit` before committing.
 
 ## CI/CD (rules)
 
-- GitHub Actions are pinned to commit SHAs (with a `# vX.Y.Z` comment);
-  bump deliberately after review.
-- Cross-job values go through `needs.<job>.outputs` — never `steps.*`
-  across jobs. No `|| true` on deploy steps.
-- Deploy gates: rollout-status checks + `deploy/scripts/smoke.sh`; prod
-  pins the built SHA and is `workflow_dispatch` only.
+- GitLab CI (`.gitlab-ci.yml`; flow/diagram: `docs/CICD.md`). Job images
+  and tool versions are pinned (`docker:27.3.1`, `alpine/k8s:1.31.2`,
+  `TRIVY_VERSION`) — bump deliberately after review.
+- Cross-job values go through `artifacts: reports: dotenv` (`build.env`
+  → `$ECR_REGISTRY`) — never recompute downstream. No `|| true` on
+  deploy steps.
+- Deploy gates: `resource_group` serialization per env + protected
+  `production` environment (required approvers) + rollout-status checks
+  + `deploy/scripts/smoke.sh`; prod pins the built `$CI_COMMIT_SHA` and
+  is `when: manual` only.
 - Zero-tolerance: `eval/runner.py --suite pr --fail-on-leak --fail-on-thresholds` fails the
   pipeline on any ACL leak or deterministic quality-gate breach (eval/gates.yaml).
 

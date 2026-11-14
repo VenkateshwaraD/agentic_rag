@@ -1,0 +1,219 @@
+# GitLab CI/CD — pipeline for the agentic RAG copilot.
+# Migrated from .github/workflows/ci.yml. Flow + diagram: docs/CICD.md.
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+
+variables:
+  AWS_REGION: us-east-1
+  TRIVY_VERSION: "0.58.0"   # pinned — bump deliberately after review
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+
+default:
+  image: python:3.12-bookworm
+  interruptible: true       # a newer pipeline for the same ref cancels stale test jobs
+  cache:
+    key:
+      files: [pyproject.toml]
+    paths: [.pip-cache]
+
+stages:
+  - test
+  - verify
+  - build
+  - deploy
+
+# ---------- shared snippets ----------
+
+.pip-install: &pip-install |
+  pip install -e ".[dev]"
+
+# GitLab OIDC → AWS role (mirrors configure-aws-credentials + id-token).
+# Requires CI/CD variable AWS_ROLE_ARN and a matching AWS IAM OIDC provider
+# whose audience is sts.amazonaws.com.
+.aws-oidc: &aws-oidc |
+  CREDS=$(aws sts assume-role-with-web-identity \
+    --role-arn "$AWS_ROLE_ARN" \
+    --role-session-name "gitlab-${CI_JOB_ID}" \
+    --web-identity-token "$GITLAB_OIDC_TOKEN" \
+    --duration-seconds 3600 \
+    --output json)
+  export AWS_ACCESS_KEY_ID=$(echo "$CREDS" | jq -r '.Credentials.AccessKeyId')
+  export AWS_SECRET_ACCESS_KEY=$(echo "$CREDS" | jq -r '.Credentials.SecretAccessKey')
+  export AWS_SESSION_TOKEN=$(echo "$CREDS" | jq -r '.Credentials.SessionToken')
+  export AWS_DEFAULT_REGION="$AWS_REGION"
+
+# ---------- test ----------
+
+test:
+  stage: test
+  script:
+    - *pip-install
+    - ruff check src eval tests
+    - ruff format --check src eval tests
+    - mypy src
+    - pytest tests/unit -q
+
+# ---------- verify (needs test) ----------
+
+integration-test:
+  stage: verify
+  needs: [test]
+  services:
+    - name: pgvector/pgvector:pg16
+      alias: postgres
+  variables:
+    POSTGRES_USER: rag
+    POSTGRES_PASSWORD: rag
+    POSTGRES_DB: ragdb
+    DATABASE_URL: postgresql://rag:rag@postgres:5432/ragdb
+    OPS_DATABASE_URL: postgresql://rag:rag@postgres:5432/opsdb
+  script:
+    - *pip-install
+    # GitLab services expose no health-gate; wait for the port instead
+    - |
+      python - <<'EOF'
+      import socket, time, sys
+      for _ in range(60):
+          try:
+              socket.create_connection(("postgres", 5432), 2).close()
+              sys.exit(0)
+          except OSError:
+              time.sleep(1)
+      sys.exit("postgres service never came up")
+      EOF
+    # integration tests self-skip on missing deps (OpenSearch/LLM); the
+    # SQL read-only permission checks run against the service container
+    - pytest tests/integration -q
+    # small PR eval suite — deterministic rows only; zero-tolerance ACL
+    # gate + deterministic quality floors (eval/gates.yaml). Ragas keys
+    # are absent without an Anthropic key → their checks report "not
+    # run" and never fail the gate.
+    - python eval/runner.py --suite pr --fail-on-leak --fail-on-thresholds
+
+# dependency vulnerability scan — fails on known CVEs in the env
+pip-audit:
+  stage: verify
+  needs: [test]
+  script:
+    - pip install -e ".[dev]" pip-audit
+    - pip-audit --skip-editable
+
+# filesystem/container config scan (Dockerfiles, k8s manifests, secrets)
+trivy-fs:
+  stage: verify
+  needs: [test]
+  image:
+    name: aquasec/trivy:$TRIVY_VERSION
+    entrypoint: [""]
+  script:
+    - trivy fs --severity CRITICAL,HIGH --exit-code 1 .
+
+# ---------- build (needs all gates; main only) ----------
+
+build:
+  stage: build
+  # unlike the old Actions DAG, the eval gate also blocks build/deploy —
+  # matches deploy/README.md: "a red gate anywhere stops the pipeline"
+  needs: [test, integration-test, pip-audit, trivy-fs]
+  image: docker:27.3.1-cli
+  services:
+    - docker:27.3.1-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: https://sts.amazonaws.com
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  before_script:
+    - apk add --no-cache aws-cli jq curl ca-certificates
+    - *aws-oidc
+    - ECR_REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${AWS_REGION}.amazonaws.com
+    - aws ecr get-login-password | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+    - curl -sSfL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" | tar -xz trivy
+    - echo "ECR_REGISTRY=$ECR_REGISTRY" >> build.env
+  script:
+    # backend
+    - >-
+      docker build -f deploy/docker/backend.Dockerfile
+      -t "$ECR_REGISTRY/agentic-rag-backend:$CI_COMMIT_SHA"
+      -t "$ECR_REGISTRY/agentic-rag-backend:staging" .
+    - docker push --all-tags "$ECR_REGISTRY/agentic-rag-backend"
+    # frontend
+    - >-
+      docker build -f deploy/docker/frontend.Dockerfile
+      -t "$ECR_REGISTRY/agentic-rag-frontend:$CI_COMMIT_SHA"
+      -t "$ECR_REGISTRY/agentic-rag-frontend:staging" .
+    - docker push --all-tags "$ECR_REGISTRY/agentic-rag-frontend"
+    # image vulnerability scan — blocks deploy on CRITICAL/HIGH findings
+    - export TRIVY_USERNAME=AWS
+    - export TRIVY_PASSWORD=$(aws ecr get-login-password)
+    - >-
+      ./trivy image --severity CRITICAL,HIGH --exit-code 1 --ignore-unfixed
+      "$ECR_REGISTRY/agentic-rag-backend:$CI_COMMIT_SHA"
+    - >-
+      ./trivy image --severity CRITICAL,HIGH --exit-code 1 --ignore-unfixed
+      "$ECR_REGISTRY/agentic-rag-frontend:$CI_COMMIT_SHA"
+  artifacts:
+    reports:
+      dotenv: build.env   # passes ECR_REGISTRY to deploy jobs (like needs.*.outputs)
+
+# ---------- deploy (needs build) ----------
+
+.deploy-base: &deploy-base
+  image: alpine/k8s:1.31.2          # kubectl + kustomize toolkit (pinned)
+  interruptible: false              # never cancel an in-flight deploy
+  needs: [build]
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: https://sts.amazonaws.com
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  before_script:
+    - apk add --no-cache aws-cli jq bash
+    - *aws-oidc
+    - aws eks update-kubeconfig --name "$EKS_CLUSTER"
+
+deploy-staging:
+  stage: deploy
+  <<: *deploy-base
+  environment:
+    name: staging
+  resource_group: staging           # one staging deploy at a time (no cancel)
+  script:
+    - cd deploy/k8s/overlays/staging
+    - >-
+      kustomize edit set image
+      "ECR_REGISTRY/agentic-rag-backend=$ECR_REGISTRY/agentic-rag-backend:$CI_COMMIT_SHA"
+      "ECR_REGISTRY/agentic-rag-frontend=$ECR_REGISTRY/agentic-rag-frontend:$CI_COMMIT_SHA"
+    - kubectl apply -k .
+    - kubectl rollout status deployment/backend -n agentic-rag --timeout=180s
+    - kubectl rollout status deployment/streamlit -n agentic-rag --timeout=120s
+    - $CI_PROJECT_DIR/deploy/scripts/smoke.sh staging
+
+deploy-prod:
+  stage: deploy
+  <<: *deploy-base
+  environment:
+    name: production                # mark protected → required approvals = prod gate
+  resource_group: production
+  rules:
+    # manual job = the workflow_dispatch equivalent; only on default branch
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+  script:
+    - cd deploy/k8s/overlays/prod
+    - >-
+      kustomize edit set image
+      "ECR_REGISTRY/agentic-rag-backend=$ECR_REGISTRY/agentic-rag-backend:$CI_COMMIT_SHA"
+      "ECR_REGISTRY/agentic-rag-frontend=$ECR_REGISTRY/agentic-rag-frontend:$CI_COMMIT_SHA"
+    - kubectl apply -k .
+    - kubectl rollout status deployment/backend -n agentic-rag --timeout=300s
+    - kubectl rollout status deployment/streamlit -n agentic-rag --timeout=180s
+    - $CI_PROJECT_DIR/deploy/scripts/smoke.sh prod

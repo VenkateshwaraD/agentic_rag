@@ -7,7 +7,7 @@ incident response.
 Author: venkateshwara doijode
 
 Local/dev operations: `docs/RUNBOOK.md`. Design internals: `docs/WORKFLOW.md`.
-Manifests: `deploy/k8s/`; pipeline: `.github/workflows/ci.yml`.
+Manifests: `deploy/k8s/`; pipeline: `.gitlab-ci.yml` (`docs/CICD.md`).
 
 ---
 
@@ -34,9 +34,9 @@ managed service or SaaS — there are no in-cluster StatefulSets.
 | Env | Manifests | Trigger | Secrets source |
 |---|---|---|---|
 | staging | `deploy/k8s/overlays/staging` | every push to `main` | `base/secret.yaml` placeholders (dev-only) |
-| prod | `deploy/k8s/overlays/prod` | `workflow_dispatch` only | AWS Secrets Manager via `ExternalSecret` |
+| prod | `deploy/k8s/overlays/prod` | manual `deploy-prod` job only | AWS Secrets Manager via `ExternalSecret` |
 
-Both deploy the exact `${{ github.sha }}` image built by the `build` job —
+Both deploy the exact `$CI_COMMIT_SHA` image built by the `build` job —
 never a floating tag.
 
 ## 2. Prerequisites
@@ -45,11 +45,11 @@ never a floating tag.
 |---|---|
 | AWS account + region | `us-east-1` (base ConfigMap) |
 | EKS cluster | name in repo secret `EKS_CLUSTER`; namespace `agentic-rag` |
-| ECR registry | outputs of `build` job (`needs.build.outputs.registry`) |
+| ECR registry | dotenv artifact of `build` job (`$ECR_REGISTRY`) |
 | IRSA role | `eks.amazonaws.com/role-arn` on `serviceaccount/copilot-backend` → role granting `bedrock:InvokeModel` for the Titan embed model |
 | External Secrets Operator | installed in-cluster + a `ClusterSecretStore` named `aws-secrets-manager` bound to IRSA — required by `overlays/prod/externalsecret.yaml` |
-| GitHub environments | `staging` and `production` — configure required reviewers on `production` (that's the prod approval gate) |
-| Repo secrets | `AWS_ROLE_ARN`, `EKS_CLUSTER`; optional `SMOKE_API_KEY`/`SMOKE_USER_ID` for the answer probe |
+| GitLab environments | `staging` and `production` — mark `production` a protected environment with required approvers (that's the prod approval gate) |
+| CI/CD variables | `AWS_ROLE_ARN`, `EKS_CLUSTER`; optional `SMOKE_API_KEY`/`SMOKE_USER_ID` for the answer probe |
 
 **Approvals needed before first prod deploy**
 
@@ -177,7 +177,7 @@ Revoke the old value only *after* pods confirm healthy (`rollout status`).
 
 ## 5. Deploy and rollback
 
-### Pipeline (`ci.yml`)
+### Pipeline (`.gitlab-ci.yml` — full diagram in `docs/CICD.md`)
 
 ```
 lint/typecheck/unit ─┐
@@ -186,13 +186,14 @@ pip-audit + Trivy   ─┘   --fail-on-thresholds)
         │  └→ build + push backend/frontend images (SHA-tagged, Trivy scan)
         ├→ deploy-staging  (env: staging, every push to main)
         │     └→ rollout status + smoke.sh staging
-        └→ deploy-prod     (env: production, workflow_dispatch ONLY)
+        └→ deploy-prod     (env: production, manual job ONLY)
               └→ rollout status + smoke.sh prod
 ```
 
-- **Prod approval** = the GitHub `production` environment's required
-  reviewers — configure at least one. `deploy-prod` pins `${{ github.sha }}`,
-  is `cancel-in-progress: false`, and runs `deploy/scripts/smoke.sh prod`.
+- **Prod approval** = the protected `production` GitLab environment's
+  required approvers — configure at least one. `deploy-prod` pins
+  `$CI_COMMIT_SHA`, is serialized via `resource_group: production` +
+  `interruptible: false`, and runs `deploy/scripts/smoke.sh prod`.
 - No `|| true` anywhere — a failed apply, rollout, or smoke check fails the job.
 
 ### Rollback

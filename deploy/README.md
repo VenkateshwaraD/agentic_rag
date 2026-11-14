@@ -5,9 +5,9 @@
 | Env     | Manifests                          | Trigger                    |
 |---------|------------------------------------|----------------------------|
 | staging | `deploy/k8s/overlays/staging`      | every push to `main`       |
-| prod    | `deploy/k8s/overlays/prod`         | `workflow_dispatch` only   |
+| prod    | `deploy/k8s/overlays/prod`         | manual `deploy-prod` job   |
 
-Both deploy the exact `${{ github.sha }}` image built by the `build` job —
+Both deploy the exact `$CI_COMMIT_SHA` image built by the `build` job —
 never a floating tag.
 
 ## Secrets
@@ -57,7 +57,8 @@ kubectl rollout undo deployment/streamlit -n agentic-rag
 kubectl rollout undo deployment/backend -n agentic-rag --to-revision=<N>
 ```
 
-Or redeploy a known-good SHA: rerun `workflow_dispatch` from that commit, or
+Or redeploy a known-good SHA: play the manual `deploy-prod` job on that
+commit's pipeline, or
 `kustomize edit set image ... :<known-good-sha>` + apply, as above.
 
 Verify after rollback:

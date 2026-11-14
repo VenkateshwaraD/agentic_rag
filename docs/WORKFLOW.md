@@ -1,7 +1,7 @@
 # Agentic RAG — End-to-End Workflow
 
 How a document becomes searchable knowledge, and how a user question
-becomes a governed, cited answer. Mermaid diagrams render on GitHub;
+becomes a governed, cited answer. Mermaid diagrams render on GitLab;
 every section also links the implementing code.
 
 Author: venkateshwara doijode
