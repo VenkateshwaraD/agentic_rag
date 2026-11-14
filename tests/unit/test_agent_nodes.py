@@ -217,6 +217,29 @@ def test_tool_cited_claim_uses_tool_rows():
     assert upd["validation"]["verdict"] == "pass"
 
 
+def test_tool_cited_marker_after_sentence_break():
+    """A '[tickets system]' marker at line end still backs the claim's sentence.
+
+    The claim extractor splits on sentence boundaries, so the marker can land
+    outside the claim text — validation must scope markers per *line*, same as
+    document citations.
+    """
+    upd = validate.validate(
+        _state(
+            draft="The ticket is open and pending investigation. [tickets system]",
+            citations=[],
+            retrieved=[],
+            tool_results=[
+                {
+                    "tool": "tickets",
+                    "rows": [{"status": "open", "subject": "pending investigation"}],
+                }
+            ],
+        )
+    )
+    assert upd["validation"]["verdict"] == "pass"
+
+
 # --- review queue failure honesty -------------------------------------------
 
 

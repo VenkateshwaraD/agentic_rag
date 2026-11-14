@@ -147,9 +147,11 @@ def validate(state):
                 if f"[{c['doc_id']} §{c['section']}]" in line or f"[{c['doc_id']}]" in line
             ]
             cited_text = " ".join(_passages_for(c, retrieved) for c in cited)
-            # tool-cited claims pull support from the ops evidence pool
+            # tool-cited claims pull support from the ops evidence pool —
+            # same-line rule as doc citations (marker may sit outside the
+            # extracted claim sentence, e.g. after a sentence break)
             tool_cited = any(
-                f"[{tr['tool']} system]" in claim for tr in state.get("tool_results", [])
+                f"[{tr['tool']} system]" in line for tr in state.get("tool_results", [])
             )
             if not cited_text and tool_cited:
                 cited_text = tool_text
