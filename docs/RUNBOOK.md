@@ -46,7 +46,7 @@ in `API_KEYS` — both checks happen in `security/authn.py`. Dev fixture:
 one key per user — `dev-key-agent1`, `dev-key-agent2`, `dev-key-senior`, `dev-key-admin` (shared keys are rejected).
 
 **Production:** do not put secrets in `.env` or manifests — prod k8s uses
-`ExternalSecret` (AWS Secrets Manager); see `deploy/README.md`.
+`ExternalSecret` (AWS Secrets Manager); see `docs/PROD_RUNBOOK.md` and `deploy/README.md`.
 
 ## 3. Input data — what the agent reads
 
