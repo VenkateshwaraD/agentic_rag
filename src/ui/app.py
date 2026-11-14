@@ -420,7 +420,7 @@ def _ts_label(stem: str) -> str:
         return stem
     try:
         return datetime.strptime(
-            date_match.group(1) + date_match.group(2), "%Y%date_match%d%H%M%S"
+            date_match.group(1) + date_match.group(2), "%Y%m%d%H%M%S"
         ).strftime("%d %b %H:%M")
     except ValueError:
         return stem
